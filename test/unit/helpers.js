@@ -14,7 +14,7 @@ export const SRC = path.resolve(here, '..', '..', 'src');
  * @param {string[]} expose global names (declared with var/const) to return
  */
 export function loadBackground(files, extra = {}, expose = []) {
-  const ctx = { console, crypto: webcrypto, Uint8Array, Array, Number, Error, Math, ...extra };
+  const ctx = { console, crypto: webcrypto, Uint8Array, Array, Number, Error, Math, TextEncoder, TextDecoder, ...extra };
   vm.createContext(ctx);
   for (const f of files) {
     vm.runInContext(readFileSync(path.join(SRC, f), 'utf8'), ctx, { filename: f });

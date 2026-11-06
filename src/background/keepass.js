@@ -56,14 +56,13 @@ keepass.updateCredentials = function(callback, tab, entryId, username, password,
 		var key = verifier[1];
 		var iv = request.Nonce;
 
-		request.Login = keepass.encrypt(cryptoHelpers.encode_utf8(username), key, iv);
-
-		request.Password = keepass.encrypt(cryptoHelpers.encode_utf8(password), key, iv);
-		request.Url = keepass.encrypt(url, key, iv);
-		request.SubmitUrl = keepass.encrypt(url, key, iv);
+		request.Login = await keepass.encrypt(username, key, iv);
+		request.Password = await keepass.encrypt(password, key, iv);
+		request.Url = await keepass.encrypt(url, key, iv);
+		request.SubmitUrl = await keepass.encrypt(url, key, iv);
 
 		if(entryId) {
-			request.Uuid = keepass.encrypt(entryId, key, iv);
+			request.Uuid = await keepass.encrypt(entryId, key, iv);
 		}
 
 		// send request
@@ -114,10 +113,10 @@ keepass.retrieveCredentials = function (callback, tab, url, submiturl, forceCall
 		var id = verifier[0];
 		var key = verifier[1];
 		var iv = request.Nonce;
-		request.Url = keepass.encrypt(url, key, iv);
+		request.Url = await keepass.encrypt(url, key, iv);
 
 		if(submiturl) {
-			request.SubmitUrl = keepass.encrypt(submiturl, key, iv);
+			request.SubmitUrl = await keepass.encrypt(submiturl, key, iv);
 		}
 
 		// send request
@@ -133,11 +132,8 @@ keepass.retrieveCredentials = function (callback, tab, url, submiturl, forceCall
 				keepass.setCurrentKeePassHttpVersion(r.Version);
 
 				if (await keepass.verifyResponse(r, key, id)) {
-					var rIv = r.Nonce;
-					for (var i = 0; i < r.Entries.length; i++) {
-						keepass.decryptEntry(r.Entries[i], key, rIv);
-					}
-					entries = r.Entries;
+					// All entries or none (see decryptEntries).
+					entries = (await keepass.decryptEntries(r.Entries, key, r.Nonce)) || [];
 					keepass.updateLastUsed(keepass.databaseHash);
 					if(entries.length == 0) {
 						//questionmark-icon is not triggered, so we have to trigger for the normal symbol
@@ -198,10 +194,7 @@ keepass.generatePassword = function (callback, tab, forceCallback) {
 					var rIv = r.Nonce;
 
 					if(r.Entries) {
-						for (var i = 0; i < r.Entries.length; i++) {
-							keepass.decryptEntry(r.Entries[i], key, rIv);
-						}
-						passwords = r.Entries;
+						passwords = (await keepass.decryptEntries(r.Entries, key, rIv)) || [];
 						keepass.updateLastUsed(keepass.databaseHash);
 					}
 					else {
@@ -589,7 +582,7 @@ keepass.setVerifier = async function(request, inputKey) {
 	var iv = cryptoHelpers.randomBytes(keepass.ivBytes);
 	request.Nonce = keepass.b64e(iv);
 
-	request.Verifier = keepass.encrypt(request.Nonce, key, request.Nonce);
+	request.Verifier = await keepass.encrypt(request.Nonce, key, request.Nonce);
 	request.Hmac = await keepass.computeHmac(key, request.Nonce, request.Verifier);
 
 	return [id, key];
@@ -656,7 +649,7 @@ keepass.verifyResponse = async function(response, key, id) {
 	var iv = response.Nonce;
 	var value = null;
 	try {
-		value = keepass.decrypt(response.Verifier, key, iv, true);
+		value = await keepass.decrypt(response.Verifier, key, iv);
 	}
 	catch (e) {
 		value = null;
@@ -701,38 +694,57 @@ keepass.setCryptoKey = function(id, key) {
 	keepass.saveKey(keepass.databaseHash, id, key);
 }
 
-keepass.encrypt = function(input, key, iv) {
-	return keepass.b64e(
-		slowAES.encrypt(
-			keepass.to_b(input),
-			slowAES.modeOfOperation.CBC,
-			keepass.b64d(key),
-			keepass.b64d(iv)
-		)
-	);
+// AES-256-CBC with PKCS#7 padding (WebCrypto), as the plugin (.NET Aes,
+// Protocol.cs). Text is UTF-8 on both sides. Key, IV and data are Base64.
+keepass.aesKey = function(keyB64, usage) {
+	return crypto.subtle.importKey("raw", new Uint8Array(keepass.b64d(keyB64)),
+		{ name: "AES-CBC" }, false, [usage]);
 }
 
-keepass.decrypt = function(input, key, iv, toStr) {
-	var output = slowAES.decrypt(
-			keepass.b64d(input),
-			slowAES.modeOfOperation.CBC,
-			keepass.b64d(key),
-			keepass.b64d(iv)
-		);
-
-	return toStr ? keepass.to_s(output) : output;
+// Resolves to Base64 ciphertext.
+keepass.encrypt = async function(text, keyB64, ivB64) {
+	var key = await keepass.aesKey(keyB64, "encrypt");
+	var data = new TextEncoder().encode(String(text));
+	var out = await crypto.subtle.encrypt({ name: "AES-CBC", iv: new Uint8Array(keepass.b64d(ivB64)) }, key, data);
+	return keepass.b64e(Array.from(new Uint8Array(out)));
 }
 
-keepass.decryptEntry = function (e, key, iv) {
-	e.Uuid = keepass.decrypt(e.Uuid, key, iv, true);
-	e.Name = UTF8.decode(keepass.decrypt(e.Name, key, iv, true));
-	e.Login = UTF8.decode(keepass.decrypt(e.Login, key, iv, true));
-	e.Password = UTF8.decode(keepass.decrypt(e.Password, key, iv, true));
+// Resolves to the plain text. Rejects on a wrong key, IV or padding.
+keepass.decrypt = async function(dataB64, keyB64, ivB64) {
+	var key = await keepass.aesKey(keyB64, "decrypt");
+	var out = await crypto.subtle.decrypt({ name: "AES-CBC", iv: new Uint8Array(keepass.b64d(ivB64)) },
+		key, new Uint8Array(keepass.b64d(dataB64)));
+	return new TextDecoder("utf-8").decode(out);
+}
+
+keepass.decryptEntry = async function (e, key, iv) {
+	e.Uuid = await keepass.decrypt(e.Uuid, key, iv);
+	e.Name = await keepass.decrypt(e.Name, key, iv);
+	e.Login = await keepass.decrypt(e.Login, key, iv);
+	e.Password = await keepass.decrypt(e.Password, key, iv);
 
 	if(e.StringFields) {
 		for(var i = 0; i < e.StringFields.length; i++) {
-			e.StringFields[i].Key = UTF8.decode(keepass.decrypt(e.StringFields[i].Key, key, iv, true))
-			e.StringFields[i].Value = UTF8.decode(keepass.decrypt(e.StringFields[i].Value, key, iv, true))
+			e.StringFields[i].Key = await keepass.decrypt(e.StringFields[i].Key, key, iv);
+			e.StringFields[i].Value = await keepass.decrypt(e.StringFields[i].Value, key, iv);
 		}
+	}
+}
+
+// Decrypts all entries, or none: resolves to null if any field fails. The
+// plugin's HMAC does not cover the entries, so a changed entry is possible.
+keepass.decryptEntries = async function (entries, key, iv) {
+	if(!Array.isArray(entries)) {
+		return null;
+	}
+	try {
+		for (var i = 0; i < entries.length; i++) {
+			await keepass.decryptEntry(entries[i], key, iv);
+		}
+		return entries;
+	}
+	catch (e) {
+		console.log("KeePassHttp response rejected: an entry could not be decrypted");
+		return null;
 	}
 }

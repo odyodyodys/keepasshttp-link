@@ -7,7 +7,7 @@ function load(settings) {
   const browser = { storage: { local: { get: async () => ({ keyRing: {} }), set: async () => {}, remove: async () => {} } } };
   const page = { settings };
   return loadBackground(
-    ['background/aes.js', 'background/cryptoHelpers.js', 'background/keepass.js'],
+    ['background/cryptoHelpers.js', 'background/keepass.js'],
     { browser, page, console: { log() {} }, String, parseInt },
     ['keepass'],
   );

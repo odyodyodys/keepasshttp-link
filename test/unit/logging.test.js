@@ -18,7 +18,7 @@ test('debug mode: sendAsync logs only request type, status and size', async () =
   const browser = { storage: { local: { get: async () => ({ keyRing: {} }), set: async () => {}, remove: async () => {} } } };
   const page = { settings: { port: '19455' }, debug: (...a) => logs.push(a.map((x) => typeof x === 'string' ? x : JSON.stringify(x)).join(' ')) };
   const { keepass } = loadBackground(
-    ['background/aes.js', 'background/cryptoHelpers.js', 'background/keepass.js'],
+    ['background/cryptoHelpers.js', 'background/keepass.js'],
     { browser, page, console: { log: (m) => logs.push(String(m)) }, String, parseInt, XMLHttpRequest: FakeXHR, Promise, JSON },
     ['keepass'],
   );

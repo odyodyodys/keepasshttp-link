@@ -35,9 +35,7 @@
 	"background": {
 		"scripts": [
 			"browser-polyfill.min.js",
-			"background/aes.js",
 			"background/cryptoHelpers.js",
-			"background/utf8.js",
 			"background/utils.js",
 			"background/keepass.js",
 			"background/httpauth.js",

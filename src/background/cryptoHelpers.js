@@ -12,20 +12,6 @@
  */
 
 var cryptoHelpers = {
-	// encodes a unicode string to UTF8 (8 bit characters are critical to AES functioning properly)
-	encode_utf8:function(s)
-	{
-		try{return unescape(encodeURIComponent(s));}
-		catch(e){throw 'error during utf8 encoding: cryptoHelpers.encode_utf8.';}
-	},
-
-	// decodes a UTF8 string back to unicode
-	decode_utf8:function(s)
-	{
-		try{return decodeURIComponent(escape(s));}
-		catch(e){throw('error during utf8 decoding: cryptoHelpers.decode_utf8.');}
-	},
-
 	//convert a number array to a hex string
 	toHex:function()
 	{
@@ -51,7 +37,7 @@ var cryptoHelpers = {
 	},
 
 	// Cryptographically secure random bytes (Web Crypto CSPRNG).
-	// Returns a plain array of numbers, as slowAES expects.
+	// Returns a plain array of numbers.
 	randomBytes:function(count)
 	{
 		if(!Number.isInteger(count) || count <= 0 || count > 65536)

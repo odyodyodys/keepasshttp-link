@@ -13,7 +13,7 @@ function load() {
   const browser = { storage: { local: { get: async () => ({ keyRing: {} }), set: async () => {}, remove: async () => {} } } };
   const page = { settings: {}, tabs: {} };
   const { keepass } = loadBackground(
-    ['background/aes.js', 'background/cryptoHelpers.js', 'background/keepass.js'],
+    ['background/cryptoHelpers.js', 'background/keepass.js'],
     { browser, page, btoa, atob, String, parseInt, Uint8Array, console: { log() {} } },
     ['keepass'],
   );
