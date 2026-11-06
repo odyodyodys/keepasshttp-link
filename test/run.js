@@ -696,6 +696,98 @@ const scenarios = {
   },
 };
 
+// Item 9: page scripts cannot make the extension fill (fake clicks or keys on
+// the dropdown, or script focus()/blur() after setting a username).
+// Real user actions (WebDriver input = trusted events) still fill.
+scenarios.untrusted = async function (driver) {
+  await configure(driver, { autoFillSingleEntry: false });
+  await driver.get(PAGES_TLS.replace('{host}', 'multi') + '/login.html');
+  await sleep(3500);
+  const lens = () => driver.executeScript(
+    "return [document.getElementById('username').value.length, document.getElementById('password').value.length]");
+  // Fresh page for each case: a fill marks the password field as 'unchanged',
+  // which a script reset of the values does not undo.
+  const clear = async () => {
+    await driver.get(PAGES_TLS.replace('{host}', 'multi') + '/login.html');
+    await sleep(3500);
+  };
+  const out = {};
+
+  // A: dropdown opened by a real click; page script clicks the first item.
+  await driver.findElement(By.id('username')).click();
+  await sleep(1000);
+  out.fakeClick = await driver.executeScript(function () {
+    const li = document.querySelector('ul.ui-autocomplete li.ui-menu-item');
+    if (!li) return 'no-item';
+    (li.firstElementChild || li).click();
+    return 'clicked';
+  });
+  await sleep(1000);
+  out.afterFakeClick = await lens();
+  await clear();
+
+  // B: page script sends ArrowDown + Enter key events to the username field.
+  await driver.findElement(By.id('username')).click();
+  await sleep(1000);
+  await driver.executeScript(function () {
+    const u = document.getElementById('username');
+    for (const [key, keyCode] of [['ArrowDown', 40], ['Enter', 13]]) {
+      u.dispatchEvent(new KeyboardEvent('keydown', { key, keyCode, which: keyCode, bubbles: true, cancelable: true }));
+    }
+  });
+  await sleep(1000);
+  out.afterFakeKeys = await lens();
+  await clear();
+
+  // C: page script sets a username, then focus() + blur().
+  await driver.executeScript("const u = document.getElementById('username'); u.value = 'bob-test'; u.dispatchEvent(new Event('input', { bubbles: true })); u.focus(); u.blur();");
+  await sleep(2000);
+  out.afterScriptBlur = await lens();
+  await clear();
+
+  // Positive D: real keys ArrowDown + Enter in the dropdown.
+  await driver.findElement(By.id('username')).click();
+  await sleep(1000);
+  await driver.findElement(By.id('username')).sendKeys(Key.ARROW_DOWN);
+  await sleep(300);
+  await driver.findElement(By.id('username')).sendKeys(Key.ENTER);
+  await sleep(1500);
+  out.afterRealKeys = await lens();
+  await clear();
+
+  // Positive E: user types a username and leaves the field with Tab.
+  await driver.findElement(By.id('username')).click();
+  await sleep(500);
+  await driver.findElement(By.id('username')).sendKeys(Key.ESCAPE);
+  await driver.findElement(By.id('username')).sendKeys('bob-test');
+  await sleep(500);
+  await driver.findElement(By.id('username')).sendKeys(Key.ESCAPE);
+  await driver.findElement(By.id('username')).sendKeys(Key.TAB);
+  await sleep(2000);
+  out.afterTypedTab = await lens();
+  await clear();
+
+  // F: page script clicks the password generator icon: no dialog, no request.
+  const genState = () => driver.executeScript(function () {
+    const d = document.getElementById('cip-genpw-dialog');
+    const t = document.getElementById('cip-genpw-textfield-password');
+    return { open: !!(d && d.offsetParent !== null), generatedLen: t ? t.value.length : 0 };
+  });
+  await kphReset();
+  out.fakeIconClick = await driver.executeScript("const i = document.querySelector('.cip-genpw-icon'); if (!i) return 'no-icon'; i.click(); return 'clicked';");
+  await sleep(1500);
+  out.afterFakeIconClick = Object.assign(await genState(), { requests: (await kphStats())?.byType['generate-password'] ?? 0 });
+  // Positive G: real click on the icon opens the generator and generates.
+  await driver.findElement(By.css('.cip-genpw-icon')).click();
+  await sleep(1500);
+  out.afterRealIconClick = Object.assign(await genState(), { requests: (await kphStats())?.byType['generate-password'] ?? 0 });
+  out.pass = out.fakeClick === 'clicked' && out.afterFakeClick[1] === 0 && out.afterFakeKeys[1] === 0 &&
+    out.fakeIconClick === 'clicked' && !out.afterFakeIconClick.open && out.afterFakeIconClick.requests === 0 &&
+    out.afterRealIconClick.open && out.afterRealIconClick.generatedLen > 0 &&
+    out.afterScriptBlur[1] === 0 && out.afterRealKeys[1] > 0 && out.afterTypedTab[1] > 0;
+  return out;
+};
+
 // Values and dropdown inside #frame, after focusing its username field.
 async function frameState(driver) {
   await driver.switchTo().frame(await driver.findElement(By.id('frame')));

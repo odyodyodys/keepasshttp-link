@@ -5,6 +5,23 @@ var cIPJQ = jQuery.noConflict(true);
 // The background cannot see the sandbox flag, so this check is here.
 var kphcSandboxed = (window.origin === "null");
 
+// True only for an event made by the user (not by a page script). jQuery and
+// jQuery UI wrap events; the native event at the end of the chain decides.
+// A wrapped event without a native one (jQuery .trigger()) is not trusted.
+function kphcIsTrusted(e) {
+	var ev = e;
+	while (ev && ev.originalEvent) {
+		ev = ev.originalEvent;
+	}
+	if (!ev || ev instanceof cIPJQ.Event) {
+		return false;
+	}
+	return ev.isTrusted === true;
+}
+
+// Last value of each username field typed by the user (trusted input events).
+var kphcTypedValues = new WeakMap();
+
 // contains already called method names
 var _called = {};
 
@@ -113,12 +130,25 @@ cipAutocomplete.init = function(field) {
 	// of handlers (that caused double searches and double fills on blur).
 	field
 		.off(".kphcAc")
+		.on("input.kphcAc", cipAutocomplete.onInput)
 		.on("click.kphcAc", cipAutocomplete.onClick)
 		.on("blur.kphcAc", cipAutocomplete.onBlur)
 		.on("focus.kphcAc", cipAutocomplete.onFocus);
 }
 
-cipAutocomplete.onClick = function() {
+cipAutocomplete.onInput = function(e) {
+	if(kphcIsTrusted(e)) {
+		kphcTypedValues.set(this, this.value);
+	}
+	else {
+		kphcTypedValues.delete(this);
+	}
+}
+
+cipAutocomplete.onClick = function(e) {
+	if(!kphcIsTrusted(e)) {
+		return;
+	}
 	cIPJQ(this).autocomplete("search", cIPJQ(this).val());
 }
 
@@ -152,6 +182,10 @@ cipAutocomplete.onSource = function (request, callback) {
 
 cipAutocomplete.onSelect = function (e, ui) {
 	e.preventDefault();
+	// A page script can click the menu item or send key events: no fill then.
+	if(!kphcIsTrusted(e)) {
+		return;
+	}
 	cip.setValueWithChange(cIPJQ(this), ui.item.value);
 	var fieldId = cipFields.prepareId(cIPJQ(this).attr("data-cip-id"));
 	var combination = cipFields.getCombination("username", fieldId);
@@ -160,11 +194,14 @@ cipAutocomplete.onSelect = function (e, ui) {
 	cIPJQ(this).data("fetched", true);
 }
 
-cipAutocomplete.onBlur = function() {
+cipAutocomplete.onBlur = function(e) {
 	if(cIPJQ(this).data("fetched") == true) {
 		cIPJQ(this).data("fetched", false);
 	}
-	else {
+	// Fill the password for a typed username only if the user typed it and
+	// the user left the field. A script can call blur() (trusted event) but
+	// cannot type, so both checks are needed.
+	else if(kphcIsTrusted(e) && kphcTypedValues.get(this) === this.value) {
 		var fieldId = cipFields.prepareId(cIPJQ(this).attr("data-cip-id"));
 		var fields = cipFields.getCombination("username", fieldId);
 		if(_f(fields.password) && _f(fields.password).data("unchanged") != true && cIPJQ(this).val() != "") {
@@ -260,6 +297,11 @@ cipPassword.createDialog = function() {
 		.css("float", "left")
 		.click(function(e) {
 			e.preventDefault();
+			// Real click, or the internal call when the dialog opens (see open below).
+			if(!kphcIsTrusted(e) && !cipPassword.generateOnOpen) {
+				return;
+			}
+			cipPassword.generateOnOpen = false;
 			browser.runtime.sendMessage({
 				action: "generate_password"
 			}).then(cipPassword.callbackGeneratedPassword);
@@ -272,7 +314,12 @@ cipPassword.createDialog = function() {
 		.addClass("b2c-btn")
 		.addClass("b2c-btn-small")
 		.css("float", "right")
-		.click(cipPassword.copyPasswordToClipboard);
+		.click(function(e) {
+			e.preventDefault();
+			if(kphcIsTrusted(e)) {
+				cipPassword.copyPasswordToClipboard();
+			}
+		});
 
 	$divFloat.append($btnClipboard);
 
@@ -312,6 +359,9 @@ cipPassword.createDialog = function() {
 		.addClass("b2c-btn-small")
 		.click(function(e) {
 			e.preventDefault();
+			if(!kphcIsTrusted(e)) {
+				return;
+			}
 
 			var fieldId = cIPJQ("#cip-genpw-dialog:first").data("cip-genpw-field-id");
 			var field = cIPJQ("input[data-cip-id='"+fieldId+"']:first");
@@ -362,6 +412,7 @@ cipPassword.createDialog = function() {
 			});
 
 			if(cIPJQ("input#cip-genpw-textfield-password:first").val() == "") {
+				cipPassword.generateOnOpen = true;
 				cIPJQ("button#cip-genpw-btn-generate:first").click();
 			}
 		}
@@ -406,6 +457,9 @@ cipPassword.createIcon = function(field) {
 	cipPassword.setIconPosition($icon, field);
 	$icon.click(function(e) {
 		e.preventDefault();
+		if(!kphcIsTrusted(e)) {
+			return;
+		}
 
 		if(!field.is(":visible")) {
 			$icon.remove();
