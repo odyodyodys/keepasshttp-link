@@ -5,6 +5,9 @@ $(function () {
 			var tab = tabs[0];
 			var data = global.page.tabs[tab.id].loginList;
 			var ul = document.getElementById("login-list");
+			if (!/^https:/i.test(String(data.url || ""))) {
+				document.getElementById("insecure-warning").hidden = false;
+			}
 			for (var i = 0; i < data.logins.length; i++) {
 				var li = document.createElement("li");
 				var a = document.createElement("a");

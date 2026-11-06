@@ -74,10 +74,25 @@ httpAuth.processPendingCallbacks = function (details, resolve, reject) {
 		});
 }
 
+// Credentials are sent without a user action only to an https:// page.
+// Never automatically over plain http:// and never for proxy auth.
+httpAuth.mayAutoSend = function (details) {
+	if (details.isProxy) {
+		return false;
+	}
+	try {
+		return new URL(details.url).protocol === "https:";
+	}
+	catch (e) {
+		return false;
+	}
+}
+
 httpAuth.loginOrShowCredentials = function (logins, details, resolve, reject) {
-	// at least one login found --> use first to login
+	// at least one login found --> use first to login (https only),
+	// else let the user choose in the popup
 	if (logins.length > 0 && page.settings.autoFillAndSend === true) {
-		if (logins.length == 1) {
+		if (logins.length == 1 && httpAuth.mayAutoSend(details)) {
 			resolve({
 				authCredentials: {
 					username: logins[0].Login,

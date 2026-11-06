@@ -16,8 +16,12 @@ page.initSettings = function() {
 			if(!("autoCompleteUsernames" in page.settings) || page.settings.autoCompleteUsernames === 1) {
 				page.settings.autoCompleteUsernames = true;
 			}
-			if(!("autoFillAndSend" in page.settings) || page.settings.autoFillAndSend === 1) {
-				page.settings.autoFillAndSend = true;
+			// HTTP auth auto-send is off by default. Older versions had it on by
+			// default, so turn it off once for existing settings (marker
+			// httpAuthDefaultOff). The user can turn it on again in the options.
+			if(!("autoFillAndSend" in page.settings) || page.settings.httpAuthDefaultOff !== true) {
+				page.settings.autoFillAndSend = false;
+				page.settings.httpAuthDefaultOff = true;
 			}
 			if(!("usePasswordGenerator" in page.settings) || page.settings.usePasswordGenerator === 1) {
 				page.settings.usePasswordGenerator = true;

@@ -391,6 +391,46 @@ const scenarios = {
     return out;
   },
 
+  // Item 5: HTTP Basic Auth. Default: auto-send off. Even when turned on,
+  // nothing is sent automatically to an http:// page. (The https:// case is
+  // covered by unit tests; the test pages have no TLS.)
+  async basicauth(driver) {
+    const basic = PAGES.replace('{host}', 'single');
+    const stats = async () => (await fetch(basic + '/__basic')).json();
+    const visit = async () => {
+      await fetch(basic + '/__basic/reset', { method: 'POST' });
+      // Not driver.get(): the auth prompt would block the page load.
+      await driver.executeScript('location.href = arguments[0]', basic + '/basic');
+      await sleep(3000);
+      try { await driver.switchTo().alert().dismiss(); } catch { /* no prompt */ }
+      await sleep(500);
+      const s = await stats();
+      await driver.get(basic + '/login.html').catch(() => {});
+      return s;
+    };
+    await openExtPage(driver, 'options/options.html');
+    const def = await driver.executeAsyncScript(function (done) {
+      browser.storage.local.get({ settings: {} }).then((it) => done(it.settings.autoFillAndSend));
+    });
+    await toWebTab(driver);
+    const off = await visit();
+    await configure(driver, { autoFillAndSend: true });
+    await openExtPage(driver, 'options/options.html');
+    await extCall(driver, 'init_http_auth');
+    await toWebTab(driver);
+    const onHttp = await visit();
+    await configure(driver, { autoFillAndSend: false });
+    await openExtPage(driver, 'options/options.html');
+    await extCall(driver, 'init_http_auth');
+    await toWebTab(driver);
+    return {
+      defaultSetting: def,
+      settingOff: off,
+      settingOnHttp: onHttp,
+      pass: def === false && off.withoutAuth >= 1 && off.withAuth === 0 && onHttp.withoutAuth >= 1 && onHttp.withAuth === 0,
+    };
+  },
+
   // Form appears after 2.5 s.
   async late(driver) {
     await configure(driver, { autoFillSingleEntry: false });
