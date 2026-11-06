@@ -211,22 +211,43 @@ async function associate(driver) {
   return st.r;
 }
 
+// Item 17a: the login dropdown is in a CLOSED shadow root. The page cannot
+// see inside; WebDriver can (measured with geckodriver 0.37.1).
+async function dropdownState(driver) {
+  const hosts = await driver.findElements(By.id('kphc-ac-host'));
+  const out = { hosts: hosts.length, open: false, items: [], warning: false, redMenu: false, pageSeesShadow: null };
+  if (!hosts.length) return out;
+  out.pageSeesShadow = await driver.executeScript("return document.getElementById('kphc-ac-host').shadowRoot !== null");
+  out.open = await hosts[0].isDisplayed();
+  if (!out.open) return out;
+  const sr = await hosts[0].getShadowRoot();
+  for (const li of await sr.findElements(By.css('li[role=option]'))) out.items.push(await li.getText());
+  const warn = await sr.findElements(By.css('li[role=alert]'));
+  out.warning = warn.length > 0 && await warn[0].isDisplayed();
+  out.redMenu = (await (await sr.findElement(By.css('ul'))).getCssValue('border-top-color')) === 'rgb(176, 0, 32)';
+  return out;
+}
+async function clickDropdownItem(driver, index = 0) {
+  const sr = await (await driver.findElement(By.id('kphc-ac-host'))).getShadowRoot();
+  await (await sr.findElements(By.css('li[role=option]')))[index].click();
+}
+
 async function pageState(driver) {
-  return driver.executeScript(function () {
-    const vis = (el) => !!(el && el.offsetParent !== null);
-    const items = [...document.querySelectorAll('ul.ui-autocomplete li.ui-menu-item')];
-    const warn = document.querySelector('ul.ui-autocomplete li.kphc-insecure-warning');
+  const s = await driver.executeScript(function () {
     return {
       events: (window.__kph && window.__kph.events) || [],
-      autocompleteMenus: document.querySelectorAll('ul.ui-autocomplete').length,
-      autocompleteItemsVisible: items.filter(vis).map((li) => li.textContent),
-      insecureWarningVisible: vis(warn),
-      insecureMenu: !!document.querySelector('ul.ui-autocomplete.kphc-insecure'),
       genpwIcons: document.querySelectorAll('.cip-genpw-icon').length,
       usernameLen: (document.getElementById('username') || {}).value?.length ?? null,
       passwordLen: (document.getElementById('password') || {}).value?.length ?? null,
     };
   });
+  const d = await dropdownState(driver);
+  s.autocompleteMenus = d.hosts;
+  s.autocompleteItemsVisible = d.items;
+  s.insecureWarningVisible = d.warning;
+  s.insecureMenu = d.redMenu;
+  s.pageSeesDropdown = d.pageSeesShadow;
+  return s;
 }
 
 // Mock request log, times relative to the first request (ms). No secrets.
@@ -329,7 +350,8 @@ const scenarios = {
       getLoginsOnLoad: stats?.byType['get-logins'] ?? 'n/a',
       autocompleteItemsOnFocus: s.autocompleteItemsVisible,
       autocompleteMenus: s.autocompleteMenus,
-      pass: stats?.byType['get-logins'] === 1 && s.autocompleteItemsVisible.length === 2,
+      pageSeesDropdown: s.pageSeesDropdown,
+      pass: stats?.byType['get-logins'] === 1 && s.autocompleteItemsVisible.length === 2 && s.pageSeesDropdown === false,
     };
   },
 
@@ -484,7 +506,7 @@ const scenarios = {
       }
       let picked = null;
       if (pick && open.autocompleteItemsVisible.length) {
-        await driver.findElement(By.css('ul.ui-autocomplete li.ui-menu-item')).click();
+        await clickDropdownItem(driver, 0);
         await sleep(1000);
         picked = (await pageState(driver)).passwordLen;
       }
@@ -553,29 +575,30 @@ const scenarios = {
   // "redetect_fields" as on a fresh page (stacked focus/click handlers each
   // ran the search again).
   async stacking(driver) {
-    // Counts dropdown items added to the page during one click on username.
-    const rendersOnClick = async () => {
-      await driver.executeScript(function () {
-        window.__acAdded = 0;
-        window.__acObs = new MutationObserver((ms) => {
-          // Check the parent (m.target): a later render may already have removed n.
-          for (const m of ms) for (const n of m.addedNodes) {
-            if (n.nodeType === 1 && n.matches('li') && m.target.closest && m.target.closest('#kphc-ac-menu')) window.__acAdded++;
-          }
-        });
-        window.__acObs.observe(document.body, { childList: true, subtree: true });
-      });
+    // Item 17a: the dropdown is in a closed shadow root, so count effects:
+    // one dropdown host, same items, and ONE password fill when the user types
+    // the username and leaves the field (stacked handlers filled twice).
+    const measure = async () => {
       await driver.executeScript("document.getElementById('other').focus()");
       await sleep(300);
       await driver.findElement(By.id('username')).click();
-      await sleep(1500);
+      await sleep(1200);
+      const d = await dropdownState(driver);
       await driver.findElement(By.id('username')).sendKeys(Key.ESCAPE);
-      return driver.executeScript('window.__acObs.disconnect(); return window.__acAdded;');
+      const t0 = await driver.executeScript('return Math.round(performance.now())');
+      await driver.findElement(By.id('username')).sendKeys('user-one');
+      await driver.findElement(By.id('username')).sendKeys(Key.ESCAPE);
+      await driver.findElement(By.id('username')).sendKeys(Key.TAB);
+      await sleep(1500);
+      const s = await pageState(driver);
+      return { hosts: d.hosts, items: d.items.length, passwordFills: countEvents(s.events, 'password', 'input', t0) };
     };
     await configure(driver, { autoFillSingleEntry: false });
     await driver.get(PAGES.replace('{host}', 'single') + '/login.html');
     await sleep(3000);
-    const fresh = await rendersOnClick();
+    const fresh = await measure();
+    await driver.get(PAGES.replace('{host}', 'single') + '/login.html');
+    await sleep(3000);
     await openExtPage(driver, 'options/options.html');
     const sent = await driver.executeAsyncScript(function (done) {
       browser.tabs.query({ url: '*://single.localhost/*' }).then(async (tabs) => {
@@ -587,10 +610,11 @@ const scenarios = {
       }, (e) => done(String(e)));
     });
     await toWebTab(driver);
-    await sleep(1000);
-    const afterRedetect = await rendersOnClick();
-    return { tabsFound: sent, rendersFresh: fresh, rendersAfterRedetect: afterRedetect,
-      pass: sent === 1 && fresh > 0 && afterRedetect === fresh };
+    await sleep(1500);
+    const afterRedetect = await measure();
+    return { tabsFound: sent, fresh, afterRedetect,
+      pass: sent === 1 && fresh.hosts === 1 && afterRedetect.hosts === 1 && fresh.items > 0 &&
+        afterRedetect.items === fresh.items && fresh.passwordFills === 1 && afterRedetect.passwordFills === 1 };
   },
 
   // Item 7 (B7): a login chosen in the login popup fills only the frame that
@@ -718,11 +742,14 @@ scenarios.untrusted = async function (driver) {
   // A: dropdown opened by a real click; page script clicks the first item.
   await driver.findElement(By.id('username')).click();
   await sleep(1000);
+  // Item 17a: the items are in a closed shadow root. The page can only click the host.
   out.fakeClick = await driver.executeScript(function () {
-    const li = document.querySelector('ul.ui-autocomplete li.ui-menu-item');
-    if (!li) return 'no-item';
-    (li.firstElementChild || li).click();
-    return 'clicked';
+    const h = document.getElementById('kphc-ac-host');
+    if (!h) return 'no-host';
+    if (h.shadowRoot) return 'shadow-visible';
+    h.click();
+    h.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+    return 'clicked-host';
   });
   await sleep(1000);
   out.afterFakeClick = await lens();
@@ -783,7 +810,7 @@ scenarios.untrusted = async function (driver) {
   await driver.findElement(By.css('.cip-genpw-icon')).click();
   await sleep(1500);
   out.afterRealIconClick = Object.assign(await genState(), { requests: (await kphStats())?.byType['generate-password'] ?? 0 });
-  out.pass = out.fakeClick === 'clicked' && out.afterFakeClick[1] === 0 && out.afterFakeKeys[1] === 0 &&
+  out.pass = out.fakeClick === 'clicked-host' && out.afterFakeClick[1] === 0 && out.afterFakeKeys[1] === 0 &&
     out.fakeIconClick === 'clicked' && !out.afterFakeIconClick.open && out.afterFakeIconClick.requests === 0 &&
     out.afterRealIconClick.open && out.afterRealIconClick.generatedLen > 0 &&
     out.afterScriptBlur[1] === 0 && out.afterRealKeys[1] > 0 && out.afterTypedTab[1] > 0;
@@ -804,7 +831,7 @@ scenarios.lock = async function (driver) {
     await sleep(300);
     await driver.findElement(By.id('username')).click();
     await sleep(1500);
-    const n = await driver.executeScript("return [...document.querySelectorAll('ul.ui-autocomplete li.ui-menu-item')].filter((li) => li.offsetParent !== null).length");
+    const n = (await dropdownState(driver)).items.length;
     await driver.findElement(By.id('username')).sendKeys(Key.ESCAPE);
     return n;
   };
@@ -878,6 +905,26 @@ scenarios.smallbugs = async function (driver) {
   return out;
 };
 
+// Item 17a: a page with a strict CSP (no inline styles) still gets a styled,
+// working dropdown: styles are set with the CSSOM, which CSP does not block.
+scenarios.csp = async function (driver) {
+  await configure(driver, { autoFillSingleEntry: false });
+  await driver.get(PAGES_TLS.replace('{host}', 'multi') + '/login-csp.html');
+  await sleep(3500);
+  await driver.findElement(By.id('username')).click();
+  await sleep(1200);
+  const d = await dropdownState(driver);
+  const sr = await (await driver.findElement(By.id('kphc-ac-host'))).getShadowRoot();
+  const border = await (await sr.findElement(By.css('ul'))).getCssValue('border-top-color');
+  await clickDropdownItem(driver, 1);
+  await sleep(1200);
+  const s = await pageState(driver);
+  // Proof that the CSP is enforced: an inline style attribute has no effect here.
+  const cspActive = await driver.executeScript("const x = document.createElement('div'); x.setAttribute('style', 'color: rgb(1, 2, 3)'); document.body.appendChild(x); const c = getComputedStyle(x).color; x.remove(); return c !== 'rgb(1, 2, 3)';");
+  return { cspActive, items: d.items, border, pageSeesShadow: d.pageSeesShadow, passwordLen: s.passwordLen,
+    pass: cspActive && d.items.length === 2 && border === 'rgb(170, 170, 170)' && d.pageSeesShadow === false && s.passwordLen > 0 };
+};
+
 // Values and dropdown inside #frame, after focusing its username field.
 async function frameState(driver) {
   await driver.switchTo().frame(await driver.findElement(By.id('frame')));
@@ -885,7 +932,7 @@ async function frameState(driver) {
     const filledChars = await driver.executeScript("return document.getElementById('username').value.length + document.getElementById('password').value.length");
     await driver.executeScript("document.getElementById('username').focus()");
     await sleep(1200);
-    const dropdownItems = await driver.executeScript("return document.querySelectorAll('ul.ui-autocomplete li.ui-menu-item').length");
+    const dropdownItems = (await dropdownState(driver)).items.length;
     const origin = await driver.executeScript('return window.origin');
     return { filledChars, dropdownItems, origin };
   } finally {

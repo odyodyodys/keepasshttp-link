@@ -102,45 +102,247 @@ function _fs(fieldId) {
 
 
 
+// Login dropdown (item 17a). Own code, no jQuery UI. It lives in a CLOSED
+// shadow root: page scripts cannot read the login names, restyle the list or
+// click an item (and a script click is not trusted anyway, see select).
+// Styles are set with the CSSOM (el.style), which a page CSP does not block.
 var cipAutocomplete = {};
 
-// objects of username + description for autocomplete
+// {label, value, loginId} for the current page
 cipAutocomplete.elements = [];
+// native field -> {enabled, handlers}
+cipAutocomplete.state = new WeakMap();
+cipAutocomplete.host = null;
+cipAutocomplete.list = null;
+cipAutocomplete.openFor = null;
+cipAutocomplete.shown = [];
+cipAutocomplete.active = -1;
+
+function kphcStyle(el, props) {
+	for (var name in props) {
+		el.style.setProperty(name, props[name], "important");
+	}
+	return el;
+}
+
+cipAutocomplete.ensureHost = function() {
+	if (cipAutocomplete.host && cipAutocomplete.host.isConnected) {
+		return;
+	}
+	var host = document.createElement("kphc-dropdown");
+	host.id = "kphc-ac-host";
+	kphcStyle(host, { "all": "initial", "position": "absolute", "display": "none",
+		"z-index": "2147483647", "left": "0px", "top": "0px" });
+	var root = host.attachShadow({ mode: "closed" });
+	var list = document.createElement("ul");
+	list.setAttribute("role", "listbox");
+	root.appendChild(list);
+	// Keep the focus in the field when the user clicks the list.
+	list.addEventListener("mousedown", function(e) { e.preventDefault(); });
+	list.addEventListener("click", function(e) {
+		var li = e.target.closest ? e.target.closest("li[data-index]") : null;
+		if (li) {
+			cipAutocomplete.select(e, Number(li.getAttribute("data-index")));
+		}
+	});
+	list.addEventListener("mousemove", function(e) {
+		var li = e.target.closest ? e.target.closest("li[data-index]") : null;
+		if (li) {
+			cipAutocomplete.setActive(Number(li.getAttribute("data-index")));
+		}
+	});
+	document.documentElement.appendChild(host);
+	cipAutocomplete.host = host;
+	cipAutocomplete.list = list;
+}
 
 cipAutocomplete.init = function(field) {
-	if(field.hasClass("ui-autocomplete-input")) {
-		//_f(credentialInputs[i].username).autocomplete("source", autocompleteSource);
-		field.autocomplete("destroy");
+	var el = field && field[0];
+	if (!el) {
+		return;
 	}
-
-	// create container div if it doesn't already exist
-	var acmenu = cIPJQ('#kphc-ac-menu');
-	if (acmenu.length == 0) {
-		cIPJQ('<div id="kphc-ac-menu" class="kphc"></div>').appendTo('body');
+	var st = cipAutocomplete.state.get(el);
+	if (st) {
+		// Second init (re-detect): same handlers, only enable again.
+		st.enabled = true;
+		return;
 	}
+	st = { enabled: true, handlers: {
+		input: cipAutocomplete.onInput,
+		click: cipAutocomplete.onClick,
+		blur: cipAutocomplete.onBlur,
+		focus: cipAutocomplete.onFocus,
+		keydown: cipAutocomplete.onKeyDown
+	} };
+	cipAutocomplete.state.set(el, st);
+	for (var type in st.handlers) {
+		el.addEventListener(type, st.handlers[type]);
+	}
+}
 
-	field
-		.addClass('kphc')
-		.autocomplete({
-			appendTo: '#kphc-ac-menu',
-			minLength: 0,
-			source: cipAutocomplete.onSource,
-			select: cipAutocomplete.onSelect,
-			open: cipAutocomplete.onOpen
-		});
-	// Namespaced and removed first, so a second init does not add a second set
-	// of handlers (that caused double searches and double fills on blur).
-	field
-		.off(".kphcAc")
-		.on("input.kphcAc", cipAutocomplete.onInput)
-		.on("click.kphcAc", cipAutocomplete.onClick)
-		.on("blur.kphcAc", cipAutocomplete.onBlur)
-		.on("focus.kphcAc", cipAutocomplete.onFocus);
+// Logins cleared: no dropdown, but the handlers stay (focus after a KeePass
+// lock fetches the logins again, see onFocus).
+cipAutocomplete.disable = function(field) {
+	var el = field && field[0];
+	var st = el && cipAutocomplete.state.get(el);
+	if (st) {
+		st.enabled = false;
+	}
+	if (cipAutocomplete.openFor === el) {
+		cipAutocomplete.close();
+	}
+}
+
+cipAutocomplete.isEnabled = function(el) {
+	var st = el && cipAutocomplete.state.get(el);
+	return !!(st && st.enabled);
+}
+
+cipAutocomplete.open = function(el, term) {
+	if (!cipAutocomplete.isEnabled(el)) {
+		return;
+	}
+	term = String(term || "").toUpperCase();
+	var matches = cipAutocomplete.elements.filter(function(item) {
+		return item.label.toUpperCase().indexOf(term) === 0;
+	});
+	if (matches.length === 0) {
+		cipAutocomplete.close();
+		return;
+	}
+	cipAutocomplete.ensureHost();
+	var list = cipAutocomplete.list;
+	var insecure = cip.isInsecurePage();
+	while (list.firstChild) {
+		list.removeChild(list.firstChild);
+	}
+	kphcStyle(list, { "margin": "0", "padding": "2px 0", "list-style": "none", "min-width": insecure ? "300px" : "160px",
+		"background": insecure ? "#fff0f0" : "#ffffff", "border": insecure ? "2px solid #b00020" : "1px solid #aaaaaa",
+		"box-shadow": "0 2px 6px rgba(0,0,0,0.25)", "font": "12px Verdana, Arial, sans-serif", "color": "#222222",
+		"text-align": "left", "max-height": "300px", "overflow-y": "auto" });
+	// Not-secure page: red list with a warning line on top. The line has no
+	// data-index, so it cannot be selected (mouse or keyboard).
+	if (insecure) {
+		var warn = document.createElement("li");
+		warn.setAttribute("role", "alert");
+		warn.className = "kphc-insecure-warning";
+		warn.textContent = cip.insecureWarningText;
+		kphcStyle(warn, { "padding": "4px 6px", "background": "#b00020", "color": "#ffffff",
+			"font-weight": "bold", "cursor": "default", "white-space": "normal" });
+		list.appendChild(warn);
+	}
+	cipAutocomplete.shown = matches;
+	for (var i = 0; i < matches.length; i++) {
+		var li = document.createElement("li");
+		li.setAttribute("role", "option");
+		li.setAttribute("data-index", String(i));
+		li.textContent = matches[i].label;
+		kphcStyle(li, { "padding": "3px 6px", "cursor": "pointer", "white-space": "nowrap" });
+		list.appendChild(li);
+	}
+	cipAutocomplete.openFor = el;
+	cipAutocomplete.setActive(-1);
+	cipAutocomplete.position();
+	kphcStyle(cipAutocomplete.host, { "display": "block" });
+}
+
+cipAutocomplete.position = function() {
+	var el = cipAutocomplete.openFor;
+	if (!el || !cipAutocomplete.host) {
+		return;
+	}
+	var r = el.getBoundingClientRect();
+	kphcStyle(cipAutocomplete.host, {
+		"left": Math.round(r.left + window.scrollX) + "px",
+		"top": Math.round(r.bottom + window.scrollY) + "px",
+		"min-width": Math.round(r.width) + "px"
+	});
+}
+
+cipAutocomplete.close = function() {
+	cipAutocomplete.openFor = null;
+	cipAutocomplete.shown = [];
+	cipAutocomplete.active = -1;
+	if (cipAutocomplete.host) {
+		kphcStyle(cipAutocomplete.host, { "display": "none" });
+	}
+}
+
+cipAutocomplete.setActive = function(index) {
+	cipAutocomplete.active = index;
+	var items = cipAutocomplete.list ? cipAutocomplete.list.querySelectorAll("li[data-index]") : [];
+	for (var i = 0; i < items.length; i++) {
+		var on = (i === index);
+		kphcStyle(items[i], { "background": on ? "#2a6fd6" : "transparent", "color": on ? "#ffffff" : "#222222" });
+		if (on && items[i].scrollIntoView) {
+			items[i].scrollIntoView({ block: "nearest" });
+		}
+	}
+}
+
+// Fill the chosen login. Only for a real user action (trusted click or key).
+cipAutocomplete.select = function(e, index) {
+	if (!kphcIsTrusted(e)) {
+		return;
+	}
+	var el = cipAutocomplete.openFor;
+	var item = cipAutocomplete.shown[index];
+	if (!el || !item) {
+		return;
+	}
+	cipAutocomplete.close();
+	var field = cIPJQ(el);
+	cip.setValueWithChange(field, item.value);
+	var fieldId = cipFields.prepareId(field.attr("data-cip-id"));
+	var combination = cipFields.getCombination("username", fieldId);
+	combination.loginId = item.loginId;
+	cip.fillInCredentials(combination, true, false);
+	field.data("fetched", true);
+}
+
+cipAutocomplete.onKeyDown = function(e) {
+	// Key events made by a page script never move or choose anything.
+	if (!kphcIsTrusted(e)) {
+		return;
+	}
+	var isOpen = cipAutocomplete.openFor === this;
+	switch (e.key) {
+		case "ArrowDown":
+			e.preventDefault();
+			if (!isOpen) {
+				cipAutocomplete.open(this, this.value);
+				return;
+			}
+			cipAutocomplete.setActive(Math.min(cipAutocomplete.active + 1, cipAutocomplete.shown.length - 1));
+			break;
+		case "ArrowUp":
+			if (isOpen) {
+				e.preventDefault();
+				cipAutocomplete.setActive(Math.max(cipAutocomplete.active - 1, 0));
+			}
+			break;
+		case "Enter":
+			if (isOpen && cipAutocomplete.active >= 0) {
+				e.preventDefault();
+				cipAutocomplete.select(e, cipAutocomplete.active);
+			}
+			break;
+		case "Escape":
+			if (isOpen) {
+				e.preventDefault();
+				cipAutocomplete.close();
+			}
+			break;
+		case "Tab":
+			cipAutocomplete.close();
+			break;
+	}
 }
 
 cipAutocomplete.onInput = function(e) {
 	if(kphcIsTrusted(e)) {
 		kphcTypedValues.set(this, this.value);
+		cipAutocomplete.open(this, this.value);
 	}
 	else {
 		kphcTypedValues.delete(this);
@@ -151,62 +353,24 @@ cipAutocomplete.onClick = function(e) {
 	if(!kphcIsTrusted(e)) {
 		return;
 	}
-	cIPJQ(this).autocomplete("search", cIPJQ(this).val());
-}
-
-cipAutocomplete.onOpen = function(event, ui) {
-	// NOT BEAUTIFUL!
-	// modifies ALL ui-autocomplete menus of class .ui-menu
-	cIPJQ("ul.ui-autocomplete.ui-menu").css("z-index", 2147483636);
-
-	// Not-secure page: red menu with a warning line on top. The line has no
-	// "ui-menu-item" class, so it cannot be selected (mouse or keyboard).
-	var menu = cIPJQ(this).autocomplete("widget");
-	menu.find("li.kphc-insecure-warning").remove();
-	menu.toggleClass("kphc-insecure", cip.isInsecurePage());
-	if(cip.isInsecurePage()) {
-		cIPJQ("<li>")
-			.addClass("kphc-insecure-warning")
-			.attr("role", "alert")
-			.text(cip.insecureWarningText)
-			.prependTo(menu);
-	}
-}
-
-cipAutocomplete.onSource = function (request, callback) {
-	var matches = cIPJQ.map( cipAutocomplete.elements, function(tag) {
-		if ( tag.label.toUpperCase().indexOf(request.term.toUpperCase()) === 0 ) {
-			return tag;
-		}
-	});
-	callback(matches);
-}
-
-cipAutocomplete.onSelect = function (e, ui) {
-	e.preventDefault();
-	// A page script can click the menu item or send key events: no fill then.
-	if(!kphcIsTrusted(e)) {
-		return;
-	}
-	cip.setValueWithChange(cIPJQ(this), ui.item.value);
-	var fieldId = cipFields.prepareId(cIPJQ(this).attr("data-cip-id"));
-	var combination = cipFields.getCombination("username", fieldId);
-	combination.loginId = ui.item.loginId;
-	cip.fillInCredentials(combination, true, false);
-	cIPJQ(this).data("fetched", true);
+	cipAutocomplete.open(this, this.value);
 }
 
 cipAutocomplete.onBlur = function(e) {
-	if(cIPJQ(this).data("fetched") == true) {
-		cIPJQ(this).data("fetched", false);
+	if (cipAutocomplete.openFor === this) {
+		cipAutocomplete.close();
+	}
+	var field = cIPJQ(this);
+	if(field.data("fetched") == true) {
+		field.data("fetched", false);
 	}
 	// Fill the password for a typed username only if the user typed it and
 	// the user left the field. A script can call blur() (trusted event) but
 	// cannot type, so both checks are needed.
 	else if(kphcIsTrusted(e) && kphcTypedValues.get(this) === this.value) {
-		var fieldId = cipFields.prepareId(cIPJQ(this).attr("data-cip-id"));
+		var fieldId = cipFields.prepareId(field.attr("data-cip-id"));
 		var fields = cipFields.getCombination("username", fieldId);
-		if(_f(fields.password) && _f(fields.password).data("unchanged") != true && cIPJQ(this).val() != "") {
+		if(_f(fields.password) && _f(fields.password).data("unchanged") != true && field.val() != "") {
 			cip.fillInCredentials(fields, true, true);
 		}
 	}
@@ -214,7 +378,7 @@ cipAutocomplete.onBlur = function(e) {
 
 cipAutocomplete.onFocus = function(e) {
 	cip.u = cIPJQ(this);
-	var field = cIPJQ(this);
+	var el = this;
 
 	// Still locked: no answer, the flag stays and the next focus tries again.
 	if(cip.refetchOnFocus && kphcIsTrusted(e)) {
@@ -222,17 +386,21 @@ cipAutocomplete.onFocus = function(e) {
 			if(cip.credentials.length > 0) {
 				cip.refetchOnFocus = false;
 			}
-			if(document.activeElement === field[0] && field.val() == "" && field.hasClass("ui-autocomplete-input")) {
-				field.autocomplete("search", "");
+			if(document.activeElement === el && el.value == "") {
+				cipAutocomplete.open(el, "");
 			}
 		});
 		return;
 	}
 
-	if(field.val() == "" && field.hasClass("ui-autocomplete-input")) {
-		field.autocomplete("search", "");
+	if(el.value == "") {
+		cipAutocomplete.open(el, "");
 	}
 }
+
+// Keep the list under its field when the page scrolls or resizes.
+window.addEventListener("scroll", function() { cipAutocomplete.position(); }, true);
+window.addEventListener("resize", function() { cipAutocomplete.position(); });
 
 
 
@@ -1851,9 +2019,7 @@ cipEvents.clearCredentials = function() {
 		for(var i = 0; i < cipFields.combinations.length; i++) {
 			var uField = _f(cipFields.combinations[i].username);
 			if(uField) {
-				if(uField.hasClass("ui-autocomplete-input")) {
-					uField.autocomplete("destroy");
-				}
+				cipAutocomplete.disable(uField);
 			}
 		}
 	}
