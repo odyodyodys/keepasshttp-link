@@ -1145,6 +1145,28 @@ scenarios.iconmove = async function (driver) {
     pass: before.inside && afterMove.inside && afterMove.fieldY - before.fieldY >= 150 && afterScroll.inside };
 };
 
+// Item 19: "Copy to clipboard" in the generator; the clipboard is cleared after 30 s.
+scenarios.clipboard = async function (driver) {
+  await configure(driver, { autoFillSingleEntry: false });
+  await driver.get(PAGES_TLS.replace('{host}', 'single') + '/login.html');
+  await sleep(3000);
+  await driver.findElement(By.css('kphc-key')).click();
+  await sleep(1500);
+  const sr = await (await driver.findElement(By.css('kphc-pwgen'))).getShadowRoot();
+  const generated = String(await (await sr.findElement(By.css('input[type=text]'))).getProperty('value'));
+  for (const b of await sr.findElements(By.css('button'))) {
+    if ((await b.getText()) === 'Copy to clipboard') { await b.click(); break; }
+  }
+  await sleep(500);
+  const message = await (await sr.findElement(By.css('[role=status]'))).getText();
+  const afterCopy = await readClipboard(driver);
+  await sleep(31500);
+  const afterTimeout = await readClipboard(driver);
+  const messageLater = await (await sr.findElement(By.css('[role=status]'))).getText();
+  return { generatedLen: generated.length, copied: afterCopy === generated, message, clearedAfter30s: afterTimeout === '', messageLater,
+    pass: generated.length > 0 && afterCopy === generated && /cleared in 30 seconds/.test(message) && afterTimeout === '' };
+};
+
 // ---------- main ----------
 const wanted = process.argv.slice(2).filter((a) => scenarios[a]);
 const names = wanted.length ? wanted : Object.keys(scenarios);

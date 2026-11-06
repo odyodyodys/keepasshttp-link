@@ -783,7 +783,10 @@ cipPassword.ensureDialog = function() {
 	onTrusted(d.btnGenerate, cipPassword.generate);
 	onTrusted(d.btnClipboard, function() { cipPassword.copyPasswordToClipboard(); });
 	onTrusted(d.btnFillIn, cipPassword.fillIn);
-	d.input.addEventListener("input", function() { d.message.textContent = ""; });
+	d.input.addEventListener("input", function() {
+		d.message.textContent = "";
+		kphcStyle(d.message, { "color": "#b00020" });
+	});
 	d.box.addEventListener("keydown", function(e) {
 		if(e.key === "Escape" && kphcIsTrusted(e)) {
 			e.preventDefault();
@@ -827,16 +830,64 @@ cipPassword.generate = function() {
 	}).then(cipPassword.callbackGeneratedPassword);
 }
 
+// Item 19: a copied password is removed from the clipboard after this time.
+// The extension cannot read the clipboard (no clipboardRead permission), so it
+// cannot check that the clipboard still holds the password. It skips the
+// clear if the user copied or cut something else in this page meanwhile.
+cipPassword.clipboardClearSeconds = 30;
+cipPassword.clearTimer = null;
+cipPassword.ownCopy = false;
+
+document.addEventListener("copy", function() { cipPassword.onOtherCopy(); }, true);
+document.addEventListener("cut", function() { cipPassword.onOtherCopy(); }, true);
+
+cipPassword.onOtherCopy = function() {
+	if(cipPassword.ownCopy || cipPassword.clearTimer === null) {
+		return;
+	}
+	clearTimeout(cipPassword.clearTimer);
+	cipPassword.clearTimer = null;
+}
+
 cipPassword.copyPasswordToClipboard = function() {
 	var d = cipPassword.dialog;
 	if(!d) {
 		return false;
 	}
 	d.input.select();
-	var success = document.execCommand("copy");
-	d.message.textContent = success ? "" : "Could not copy to the clipboard.";
+	cipPassword.ownCopy = true;
+	var success = false;
+	try {
+		success = document.execCommand("copy");
+	}
+	finally {
+		cipPassword.ownCopy = false;
+	}
+	d.message.textContent = success
+		? "Copied. The clipboard will be cleared in " + cipPassword.clipboardClearSeconds + " seconds."
+		: "Could not copy to the clipboard.";
+	kphcStyle(d.message, { "color": success ? "#2e6b2e" : "#b00020" });
 	kphcStyle(d.btnClipboard, { "background": success ? "#3c9a3c" : "#f2f2f2", "color": success ? "#ffffff" : "#222222" });
+	if(success) {
+		cipPassword.scheduleClipboardClear();
+	}
 	return success;
+}
+
+cipPassword.scheduleClipboardClear = function() {
+	if(cipPassword.clearTimer !== null) {
+		clearTimeout(cipPassword.clearTimer);
+	}
+	cipPassword.clearTimer = setTimeout(function() {
+		cipPassword.clearTimer = null;
+		// Needs the clipboardWrite permission (no user action at this time).
+		navigator.clipboard.writeText("").then(function() {
+			var d = cipPassword.dialog;
+			if(d && d.message.textContent.indexOf("Copied.") === 0) {
+				d.message.textContent = "The clipboard was cleared.";
+			}
+		}, function() {});
+	}, cipPassword.clipboardClearSeconds * 1000);
 }
 
 cipPassword.fillIn = function() {
@@ -846,11 +897,12 @@ cipPassword.fillIn = function() {
 		return;
 	}
 	var password = d.input.value;
+	var warning = "";
 	var max = parseInt(field.getAttribute("maxlength"), 10);
 	if(max > 0 && password.length > max) {
 		password = password.substring(0, max);
 		d.input.value = password;
-		d.message.textContent = "The generated password was longer than the field allows.\nIt was cut to " + max + " characters. Please remember the new password.";
+		warning = "The generated password was longer than the field allows.\nIt was cut to " + max + " characters. Please remember the new password.";
 	}
 	cip.setValueWithChange(field, password);
 	var nextField = kphcData(field, "cip-genpw-next-field");
@@ -858,6 +910,10 @@ cipPassword.fillIn = function() {
 		cip.setValueWithChange(nextField, password);
 	}
 	cipPassword.copyPasswordToClipboard();
+	if(warning) {
+		d.message.textContent = warning + "\n" + d.message.textContent;
+		kphcStyle(d.message, { "color": "#b00020" });
+	}
 }
 
 cipPassword.callbackGeneratedPassword = function(entries) {
