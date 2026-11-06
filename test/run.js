@@ -843,6 +843,41 @@ scenarios.options = async function (driver) {
   return r;
 };
 
+// Item 14: popup inserts error text as text (not HTML); an options change
+// reaches the background (save waits for storage before the reload).
+scenarios.smallbugs = async function (driver) {
+  const out = {};
+  await openExtPage(driver, 'popups/popup.html');
+  await sleep(1000);
+  out.popup = await driver.executeScript(function () {
+    status_response({ keePassHttpAvailable: false, error: '<b id="injected">E</b>' });
+    const a = document.getElementById('error-message').textContent;
+    status_response({ keePassHttpAvailable: true, configured: true, associated: true, identifier: '<i id="injected2">x</i>' });
+    return {
+      injected: !!document.getElementById('injected') || !!document.getElementById('injected2'),
+      errorText: a,
+      identifierText: document.getElementById('associated-identifier').textContent,
+    };
+  });
+  await openExtPage(driver, 'options/options.html');
+  await sleep(1000);
+  out.blink = await driver.executeAsyncScript(function (done) {
+    document.getElementById('blinkTimeout').value = '9100';
+    document.getElementById('blinkTimeoutButton').click();
+    setTimeout(async () => {
+      const bg = await browser.runtime.getBackgroundPage();
+      const seen = String(bg.page.settings.blinkTimeout);
+      document.getElementById('blinkTimeout').value = '7500';
+      document.getElementById('blinkTimeoutButton').click();
+      setTimeout(() => done(seen), 500);
+    }, 500);
+  });
+  await toWebTab(driver);
+  out.pass = !out.popup.injected && out.popup.errorText === '<b id="injected">E</b>' &&
+    out.popup.identifierText === '<i id="injected2">x</i>' && out.blink === '9100';
+  return out;
+};
+
 // Values and dropdown inside #frame, after focusing its username field.
 async function frameState(driver) {
   await driver.switchTo().frame(await driver.findElement(By.id('frame')));

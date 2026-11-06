@@ -18,11 +18,10 @@ $(function() {
 
 var options = options || {};
 
+// The background reloads the settings only after they are stored (before,
+// both ran at the same time and the background could read old values).
 options.saveSettings = function() {
-	browser.storage.local.set({'settings': options.settings});
-	browser.runtime.sendMessage({
-		action: 'load_settings'
-	});
+	return options.saveSettingsPromise();
 };
 
 options.saveSettingsPromise = function() {
@@ -38,9 +37,10 @@ options.saveSettingsPromise = function() {
 }
 
 options.saveKeyRing = function() {
-	browser.storage.local.set({'keyRing': options.keyRing});
-	browser.runtime.sendMessage({
-		action: 'load_keyring'
+	return browser.storage.local.set({'keyRing': options.keyRing}).then(function() {
+		return browser.runtime.sendMessage({
+			action: 'load_keyring'
+		});
 	});
 };
 

@@ -7,8 +7,9 @@ function status_response(r) {
 	$('#configured-not-associated').hide();
 
 
+	// Error text can come from KeePassHttp: always insert it as text, never as HTML.
 	if(!r.keePassHttpAvailable || r.databaseClosed) {
-		$('#error-message').html(r.error);
+		$('#error-message').text(r.error || "");
 		$('#error-encountered').show();
 	}
 	else if(!r.configured) {
@@ -16,21 +17,19 @@ function status_response(r) {
 	}
 	else if(r.encryptionKeyUnrecognized) {
 		$('#need-reconfigure').show();
-		$('#need-reconfigure-message').html(r.error);
+		$('#need-reconfigure-message').text(r.error || "");
 	}
 	else if(!r.associated) {
-		//$('#configured-not-associated').show();
-		//$('#unassociated-identifier').html(r.identifier);
 		$('#need-reconfigure').show();
-		$('#need-reconfigure-message').html(r.error);
+		$('#need-reconfigure-message').text(r.error || "");
 	}
 	else if(typeof(r.error) != "undefined") {
 		$('#error-encountered').show();
-		$('#error-message').html(r.error);
+		$('#error-message').text(r.error || "");
 	}
 	else {
 		$('#configured-and-associated').show();
-		$('#associated-identifier').html(r.identifier);
+		$('#associated-identifier').text(r.identifier || "");
 	}
 }
 

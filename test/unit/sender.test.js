@@ -62,6 +62,7 @@ test('classify: own extension page, content script, foreign sender', () => {
 
 test('content script cannot use privileged actions', () => {
   const { onMessage, sent } = setup();
+  // save_settings no longer exists (item 14); here it stands for any privileged action.
   for (const action of ['associate', 'load_keyring', 'save_settings', 'update_credentials']) {
     const before = sent.invoked.length;
     onMessage({ action, args: [{ port: 1 }] }, content('https://evil.localhost/'));
@@ -71,8 +72,8 @@ test('content script cannot use privileged actions', () => {
 
 test('extension page may use privileged actions', () => {
   const { onMessage } = setup();
-  const r = onMessage({ action: 'save_settings', args: [{ port: 19465 }] }, popup);
-  assert.equal(r.last.handler, 'save_settings');
+  const r = onMessage({ action: 'associate', args: [] }, popup);
+  assert.equal(r.last.handler, 'associate');
   assert.equal(r.last.tabId, 7);
 });
 

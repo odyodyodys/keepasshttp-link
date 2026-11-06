@@ -206,12 +206,6 @@ cipevent.onLoadKeyRing = function(callback, tab) {
 	});
 }
 
-cipevent.onSaveSettings = function(callback, tab, settings) {
-	browser.storage.local.set({'settings': settings}).then(function() {
-		cipevent.onLoadSettings();
-	});
-}
-
 // Content script: save or discard ("fields" = null) the user-chosen
 // credential fields of its own origin only.
 cipevent.onSaveDefinedFields = function(callback, tab, origin, fields) {
@@ -366,7 +360,6 @@ cipevent.messageHandlers = {
 	'retrieve_credentials': keepass.retrieveCredentials,
 	'show_default_browseraction': browserAction.showDefault,
 	'update_credentials': keepass.updateCredentials,
-	'save_settings': cipevent.onSaveSettings,
 	'save_defined_credential_fields': cipevent.onSaveDefinedFields,
 	'set_remember_credentials': cipevent.onSetRememberPopup,
 	'stack_add': browserAction.stackAdd,
