@@ -278,20 +278,11 @@ cipevent.onGetConnectedDatabase = function(callback, tab) {
 cipevent.onGetKeePassHttpVersions = function(callback, tab) {
 	if(keepass.currentKeePassHttp.version == 0) {
 		keepass.getDatabaseHash(tab).then(() => {
-			callback({"current": keepass.currentKeePassHttp.version, "latest": keepass.latestKeePassHttp.version});
+			callback({"current": keepass.currentKeePassHttp.version});
 		});
 	} else {
-		callback({"current": keepass.currentKeePassHttp.version, "latest": keepass.latestKeePassHttp.version});
+		callback({"current": keepass.currentKeePassHttp.version});
 	}
-}
-
-cipevent.onCheckUpdateKeePassHttp = function(callback, tab) {
-	keepass.checkForNewKeePassHttpVersion();
-	callback({"current": keepass.currentKeePassHttp.version, "latest": keepass.latestKeePassHttp.version});
-}
-
-cipevent.onUpdateAvailableKeePassHttp = function(callback, tab) {
-	callback(keepass.keePassHttpUpdateAvailable());
 }
 
 cipevent.onRemoveCredentialsFromTabInformation = function(callback, tab) {
@@ -360,7 +351,6 @@ cipevent.messageHandlers = {
 	'add_credentials': keepass.addCredentials,
 	'alert': cipevent.onShowAlert,
 	'associate': keepass.associate,
-	'check_update_keepasshttp': cipevent.onCheckUpdateKeePassHttp,
 	'get_connected_database': cipevent.onGetConnectedDatabase,
 	'get_keepasshttp_versions': cipevent.onGetKeePassHttpVersions,
 	'get_status': cipevent.onGetStatus,
@@ -380,7 +370,6 @@ cipevent.messageHandlers = {
 	'save_defined_credential_fields': cipevent.onSaveDefinedFields,
 	'set_remember_credentials': cipevent.onSetRememberPopup,
 	'stack_add': browserAction.stackAdd,
-	'update_available_keepasshttp': cipevent.onUpdateAvailableKeePassHttp,
 	'generate_password': keepass.generatePassword,
 	'is_firefox': cipevent.isFirefox
 };

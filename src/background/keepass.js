@@ -11,7 +11,6 @@ keepass.ivBytes = 16;  // AES block size
 // It must be "localhost": the plugin (Windows HTTP.sys) rejects other Host values.
 keepass.pluginHost = "localhost";
 keepass.defaultPort = 19455;
-keepass.latestVersionUrl = "https://raw.githubusercontent.com/smorks/keepasshttp/master/latest-version.txt";
 keepass.cacheTimeout = 30 * 1000; // milliseconds
 keepass.databaseHash = "no-hash"; //no-hash = keepasshttp is too old and does not return a hash value
 keepass.keyId = "chromeipass-cryptokey-name";
@@ -19,11 +18,11 @@ keepass.keyBody = "chromeipass-key";
 keepass.to_s = cryptoHelpers.convertByteArrayToString;
 keepass.to_b = cryptoHelpers.convertStringToByteArray;
 
-browser.storage.local.get({
-	'latestKeePassHttp': {'version': 0, 'versionParsed': 0, 'lastChecked': null},
-	'keyRing': {}})
+// The old online update check is removed: drop its stored value.
+browser.storage.local.remove('latestKeePassHttp');
+
+browser.storage.local.get({'keyRing': {}})
 	.then((item) => {
-	keepass.latestKeePassHttp = item.latestKeePassHttp;
 	// in-memory filter only; migrateKeyRing() persists the removal
 	keepass.dropWeakKeys(item.keyRing);
 	keepass.keyRing = item.keyRing;
@@ -462,49 +461,6 @@ keepass.setCurrentKeePassHttpVersion = function(version) {
 			"version": version,
 			"versionParsed": parseInt(version.replace(/\./g,""))
 		};
-	}
-}
-
-keepass.keePassHttpUpdateAvailable = function() {
-	if(page.settings.checkUpdateKeePassHttp && page.settings.checkUpdateKeePassHttp > 0) {
-		var lastChecked = (keepass.latestKeePassHttp.lastChecked) ? new Date(keepass.latestKeePassHttp.lastChecked) : new Date(1986, 11, 21);
-		var daysSinceLastCheck = Math.floor(((new Date()).getTime()-lastChecked.getTime())/86400000);
-		if(daysSinceLastCheck >= page.settings.checkUpdateKeePassHttp) {
-			keepass.checkForNewKeePassHttpVersion();
-		}
-	}
-
-	return (keepass.currentKeePassHttp.versionParsed > 0 && keepass.currentKeePassHttp.versionParsed < keepass.latestKeePassHttp.versionParsed);
-}
-
-keepass.checkForNewKeePassHttpVersion = function() {
-	var xhr = new XMLHttpRequest();
-	xhr.open("GET", keepass.latestVersionUrl, true);
-	xhr.setRequestHeader("Content-Type", "application/json");
-	xhr.onload = () => {
-		var $version = xhr.responseText;
-		if($version.substring(0, 1) == ":") {
-			$version = $version.substring(xhr.responseText.indexOf("KeePassHttp") + 12);
-			$version = $version.substring(0, $version.indexOf(":") - 1);
-			keepass.latestKeePassHttp.version = $version;
-			keepass.latestKeePassHttp.versionParsed = parseInt($version.replace(/\./g,""));
-		}
-		else {
-			$version = -1;
-		}
-		if($version != -1) {
-			browser.storage.local.set({'latestKeePassHttp': keepass.latestKeePassHttp});
-		}
-		keepass.latestKeePassHttp.lastChecked = new Date().valueOf();
-	};
-	xhr.onerror = (err) => {
-		console.log('Error: ' + err);
-	};
-	try {
-		xhr.send();
-	}
-	catch (e) {
-		console.log("Error: " + e);
 	}
 }
 

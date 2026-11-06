@@ -139,11 +139,13 @@ async function configure(driver, settingsPatch) {
       const s = Object.assign(it.settings, patch);
       return browser.storage.local.set({ settings: s });
     }).then(() => browser.runtime.sendMessage({ action: 'load_settings' }))
-      .then((s) => done(s && !('hostname' in s) ? true : 'hostname setting was not removed'),
+      .then((s) => done(!s ? 'no settings' : ('hostname' in s) ? 'hostname setting was not removed'
+        : ('checkUpdateKeePassHttp' in s) ? 'checkUpdateKeePassHttp setting was not removed' : true),
         (e) => done(String(e)));
     // Item 2: an old remote "hostname" setting must be ignored and removed.
     // All scenarios still reach the server, so the request went to localhost.
-  }, Object.assign({ hostname: 'remote.invalid', port: String(EXT_PORT) }, settingsPatch))
+    // Item 11: the old update-check setting must be removed too.
+  }, Object.assign({ hostname: 'remote.invalid', checkUpdateKeePassHttp: 3, port: String(EXT_PORT) }, settingsPatch))
     .then((r) => { if (r !== true) throw new Error('configure: ' + r); });
   await toWebTab(driver);
   // Returning to the web tab makes the open page fetch again (its credentials
@@ -822,6 +824,23 @@ scenarios.lock = async function (driver) {
   out.afterUnlock = await items();
   out.pass = out.before === 2 && out.whileLocked === 0 && out.afterUnlock === 2;
   return out;
+};
+
+// Item 11: options page without the online update check; it still shows the
+// plugin version (asked from the local KeePassHttp).
+scenarios.options = async function (driver) {
+  await openExtPage(driver, 'options/options.html');
+  await sleep(1500);
+  const r = await driver.executeScript(function () {
+    return {
+      yourVersion: (document.querySelector('.kphVersion em.yourVersion') || {}).textContent || null,
+      updateRadios: document.querySelectorAll('input[name=checkUpdateKeePassHttp]').length,
+      latestVersion: document.querySelectorAll('.latestVersion, .checkUpdateKeePassHttp').length,
+    };
+  });
+  await toWebTab(driver);
+  r.pass = /^\d+(\.\d+)+$/.test(r.yourVersion || '') && r.updateRadios === 0 && r.latestVersion === 0;
+  return r;
 };
 
 // Values and dropdown inside #frame, after focusing its username field.

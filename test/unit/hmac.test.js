@@ -10,7 +10,7 @@ const ID = 'test';
 const KEY = crypto.randomBytes(32).toString('base64');
 
 function load() {
-  const browser = { storage: { local: { get: async () => ({ keyRing: {} }), set: async () => {} } } };
+  const browser = { storage: { local: { get: async () => ({ keyRing: {} }), set: async () => {}, remove: async () => {} } } };
   const page = { settings: {}, tabs: {} };
   const { keepass } = loadBackground(
     ['background/aes.js', 'background/cryptoHelpers.js', 'background/keepass.js'],

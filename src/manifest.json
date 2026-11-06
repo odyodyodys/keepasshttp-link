@@ -99,7 +99,6 @@
 		"https://*/*",
 		"http://*/*",
 		"http://localhost:19455/",
-		"http://localhost/",
-		"https://raw.github.com/"
+		"http://localhost/"
 	]
 }

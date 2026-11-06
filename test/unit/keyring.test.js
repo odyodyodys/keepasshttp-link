@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { loadBackground } from './helpers.js';
 
 function load() {
-  const browser = { storage: { local: { get: async () => ({ keyRing: {} }), set: async () => {} } } };
+  const browser = { storage: { local: { get: async () => ({ keyRing: {} }), set: async () => {}, remove: async () => {} } } };
   return loadBackground(
     ['background/aes.js', 'background/cryptoHelpers.js', 'background/keepass.js'],
     { browser, console: { log() {} } },

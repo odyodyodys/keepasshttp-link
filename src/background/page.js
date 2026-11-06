@@ -10,9 +10,6 @@ page.initSettings = function() {
 	return new Promise((resolve, reject) => {
 		browser.storage.local.get({'settings': {}}).then((item) => {
 			page.settings = item.settings;
-			if(!("checkUpdateKeePassHttp" in page.settings)) {
-				page.settings.checkUpdateKeePassHttp = 3;
-			}
 			if(!("autoCompleteUsernames" in page.settings) || page.settings.autoCompleteUsernames === 1) {
 				page.settings.autoCompleteUsernames = true;
 			}
@@ -34,6 +31,8 @@ page.initSettings = function() {
 			}
 			// The host is fixed to localhost (see keepass.pluginHost). Remove the old setting.
 			delete page.settings.hostname;
+			// The online update check is removed. Remove its old setting.
+			delete page.settings.checkUpdateKeePassHttp;
 			if(!("port" in page.settings) || keepass.parsePort(page.settings.port) === null) {
 				page.settings.port = String(keepass.defaultPort);
 			}

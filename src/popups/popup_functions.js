@@ -1,14 +1,5 @@
 var $ = jQuery.noConflict(true);
 
-function updateAvailableResponse(available) {
-	if(available) {
-		$("#update-available").show();
-	}
-	else {
-		$("#update-available").hide();
-	}
-}
-
 function initSettings() {
 	$("#settings #btn-options").click(function() {
 		browser.tabs.create({
@@ -29,8 +20,4 @@ function initSettings() {
 
 $(function() {
 	initSettings();
-
-	browser.runtime.sendMessage({
-		action: "update_available_keepasshttp"
-	}).then(updateAvailableResponse);
 });

@@ -63,9 +63,6 @@
 				margin-left: 40px;
 			}
 
-			.checkUpdateKeePassHttp {
-				margin-left: 40px;
-			}
 
 			#dangerousSettings {
 				display: none;
@@ -173,27 +170,15 @@
 					<span class="help-block">For all username fields on a page a dropdown list appears which contains all available credentials.</span>
 				</p>
 				<hr />
-				<p>
-					Check for updates of KeePassHttp:
-					<br />
-					<label class="radio inline"><input type="radio" name="checkUpdateKeePassHttp" value="3" /> every 3 days</label>
-					<label class="radio inline"><input type="radio" name="checkUpdateKeePassHttp" value="7" /> every week</label>
-					<label class="radio inline"><input type="radio" name="checkUpdateKeePassHttp" value="30" /> every month</label>
-					<label class="radio inline"><input type="radio" name="checkUpdateKeePassHttp" value="0" /> never</label>
-				</p>
 				<div class="help-block kphVersion">
 					KeePassHttp-Connector needs the plugin KeePassHttp to retrieve credentials from and send them to KeePass.
 					<br />
-					You can download the latest stable version from here: <a target="_blank" href="https://github.com/pfn/keepasshttp">https://github.com/pfn/keepasshttp</a>
+					This version is tested with KeePassHttp 2.3.1.0 from <a target="_blank" rel="noopener noreferrer" href="https://github.com/alan-null/keepasshttp">https://github.com/alan-null/keepasshttp</a>
 					<br />
 					<br />
 					<div class="row">
 						<div class="span3">Your version of KeePassHttp:</div>
 						<div class="span6"><em class="yourVersion"></em></div>
-					</div>
-					<div class="row">
-						<div class="span3">Latest available version of KeePassHttp:</div>
-						<div class="span6"><em class="latestVersion"></em><button class="btn btn-mini checkUpdateKeePassHttp">Check for updates</button></div>
 					</div>
 				</div>
 				<hr />

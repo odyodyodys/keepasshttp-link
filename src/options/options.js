@@ -86,14 +86,6 @@ options.initGeneralSettings = function() {
 		action: "get_keepasshttp_versions"
 	}).then(options.showKeePassHttpVersions);
 
-	$("#tab-general-settings button.checkUpdateKeePassHttp:first").click(function(e) {
-		e.preventDefault();
-		$(this).attr("disabled", true);
-		browser.runtime.sendMessage({
-			action: "check_update_keepasshttp"
-		}).then(options.showKeePassHttpVersions);
-	});
-
 	$("#showDangerousSettings").click(function() {
 		$('#dangerousSettings').is(":visible") ? $(this).text("Show these settings anyway") : $(this).text("Hide");
 		$("#dangerousSettings").toggle();
@@ -164,15 +156,9 @@ options.showKeePassHttpVersions = function(response) {
 	if(response.current <= 0) {
 		response.current = "unknown";
 	}
-	if(response.latest <= 0) {
-		response.latest = "unknown";
-	}
 	$("#tab-general-settings .kphVersion:first em.yourVersion:first").text(response.current);
-	$("#tab-general-settings .kphVersion:first em.latestVersion:first").text(response.latest);
 
 	$("#tab-about em.versionKPH").text(response.current);
-
-	$("#tab-general-settings button.checkUpdateKeePassHttp:first").attr("disabled", false);
 }
 
 options.initConnectedDatabases = function() {

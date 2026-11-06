@@ -54,21 +54,3 @@ body {
 	font-size: 80%;
 	color: #787878;
 }
-#update-available {
-	display: none;
-	font-size: 90%;
-	color: #cc0000;
-	font-weight: bold;
-	border-top: 1px solid #333;
-	padding-top: 10px;
-	margin-top: 10px;
-}
-#update-available a:link,
-#update-available a:visited {
-	text-decoration: underline;
-	color: #cc0000;
-}
-#update-available a:hover,
-#update-available a:active {
-	text-decoration: none;
-}
