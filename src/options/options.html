@@ -216,29 +216,17 @@
 				<div id="dangerousSettings">
 				<br />
 					<p>
-						KeePassHttp-Connector communicates on <em>http://[hostname]:[port]</em> with KeePassHTTP.
+						KeePassHttp-Connector communicates on <em>http://localhost:[port]</em> with KeePassHTTP.
 						<br />
-						If you want to run KeePass on a remote computer, you have to change the hostname.
+						KeePass must run on this computer. Remote KeePass hosts are not supported, because the connection is plain HTTP.
 						<br />
 						Sometimes the default port is still in use and you have to change the port number in KeePassHTTP to get it running. So you have to set the same port number in KeePassHttp-Connector and KeePassHTTP.
-					</p>
-					<p>
-						<label for="hostname">Hostname:</label>
-						<div class="control-group">
-							<div class="input-append">
-								<input type="text" id="hostname" placeholder="localhost" value="localhost" />
-								<button class="btn" id="hostnameButton" type="button">Save</button>
-							</div>
-							<span class="help-inline">
-								Default: localhost
-							</span>
-						</div>
 					</p>
 					<p>
 						<label for="port">Port:</label>
 						<div class="control-group">
 							<div class="input-append">
-								<input type="number" id="port" placeholder="19455" value="19455" />
+								<input type="number" id="port" min="1025" max="65535" placeholder="19455" value="19455" />
 								<button class="btn" id="portButton" type="button">Save</button>
 							</div>
 							<span class="help-inline">

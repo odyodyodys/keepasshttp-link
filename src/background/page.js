@@ -28,11 +28,10 @@ page.initSettings = function() {
 			if(!("autoRetrieveCredentials" in page.settings) || page.settings.autoRetrieveCredentials === 1) {
 				page.settings.autoRetrieveCredentials = true;
 			}
-			if(!("hostname" in page.settings)) {
-				page.settings.hostname = "localhost";
-			}
-			if(!("port" in page.settings)) {
-				page.settings.port = "19455";
+			// The host is fixed to localhost (see keepass.pluginHost). Remove the old setting.
+			delete page.settings.hostname;
+			if(!("port" in page.settings) || keepass.parsePort(page.settings.port) === null) {
+				page.settings.port = String(keepass.defaultPort);
 			}
 			if(!("supressAlerts" in page.settings)) {
 				page.settings.supressAlerts = true;

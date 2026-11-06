@@ -99,7 +99,6 @@ options.initGeneralSettings = function() {
 		$("#dangerousSettings").toggle();
 	});
 
-	$("#hostname").val(options.settings["hostname"]);
 	$("#port").val(options.settings["port"]);
 	$("#blinkTimeout").val(options.settings["blinkTimeout"]);
 	$("#blinkMinTimeout").val(options.settings["blinkMinTimeout"]);
@@ -108,30 +107,15 @@ options.initGeneralSettings = function() {
 	$("#portButton").click(function() {
 		var port = $.trim($("#port").val());
 		var portNumber = parseInt(port);
-		if(isNaN(port) || portNumber < 1025 || portNumber > 99999) {
+		if(!/^[0-9]{1,5}$/.test(port) || portNumber < 1025 || portNumber > 65535) {
 			$("#port").closest(".control-group").addClass("error");
-			alert("The port number has to be in range 1025 - 99999.\nNothing saved!");
+			alert("The port number has to be in range 1025 - 65535.\nNothing saved!");
 			return;
 		}
 
 		options.settings["port"] = portNumber.toString();
 		$("#port").closest(".control-group").removeClass("error").addClass("success");
 		setTimeout(function() {$("#port").closest(".control-group").removeClass("success")}, 2500);
-
-		options.saveSettings();
-	});
-
-	$("#hostnameButton").click(function() {
-		var hostname = $("#hostname").val();
-		if($.trim(hostname) == "") {
-			$("#hostname").closest(".control-group").addClass("error");
-			alert("Hostname cannot be empty.\nNothing saved!");
-			return;
-		}
-
-		options.settings["hostname"] = hostname;
-		$("#hostname").closest(".control-group").removeClass("error").addClass("success");
-		setTimeout(function() {$("#hostname").closest(".control-group").removeClass("success")}, 2500);
 
 		options.saveSettings();
 	});

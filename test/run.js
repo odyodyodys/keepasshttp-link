@@ -131,8 +131,12 @@ async function configure(driver, settingsPatch) {
       const s = Object.assign(it.settings, patch);
       return browser.storage.local.set({ settings: s });
     }).then(() => browser.runtime.sendMessage({ action: 'load_settings' }))
-      .then(() => done(true), (e) => done(String(e)));
-  }, Object.assign({ hostname: '127.0.0.1', port: String(EXT_PORT) }, settingsPatch));
+      .then((s) => done(s && !('hostname' in s) ? true : 'hostname setting was not removed'),
+        (e) => done(String(e)));
+    // Item 2: an old remote "hostname" setting must be ignored and removed.
+    // All scenarios still reach the server, so the request went to localhost.
+  }, Object.assign({ hostname: 'remote.invalid', port: String(EXT_PORT) }, settingsPatch))
+    .then((r) => { if (r !== true) throw new Error('configure: ' + r); });
   await toWebTab(driver);
 }
 

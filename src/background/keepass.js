@@ -7,7 +7,10 @@ keepass.isEncryptionKeyUnrecognized = false;
 keepass.currentKeePassHttp = {"version": 0, "versionParsed": 0};
 keepass.keyBytes = 32; // AES-256 key
 keepass.ivBytes = 16;  // AES block size
-keepass.pluginUrlDefault = "http://localhost:19455/";
+// KeePassHttp runs on this computer only. The host is fixed: no remote hosts.
+// It must be "localhost": the plugin (Windows HTTP.sys) rejects other Host values.
+keepass.pluginHost = "localhost";
+keepass.defaultPort = 19455;
 keepass.latestVersionUrl = "https://raw.githubusercontent.com/smorks/keepasshttp/master/latest-version.txt";
 keepass.cacheTimeout = 30 * 1000; // milliseconds
 keepass.databaseHash = "no-hash"; //no-hash = keepasshttp is too old and does not return a hash value
@@ -428,11 +431,19 @@ keepass.getIconColor = function() {
 	return ((keepass.databaseHash in keepass.keyRing) && keepass.keyRing[keepass.databaseHash].icon) ? keepass.keyRing[keepass.databaseHash].icon : "blue";
 }
 
-keepass.getPluginUrl = function() {
-	if(page.settings.hostname && page.settings.port) {
-		return "http://" + page.settings.hostname + ":" + page.settings.port;
+// Returns the port as a number if it is a valid user port, else null.
+keepass.parsePort = function(value) {
+	var text = String(value === undefined || value === null ? "" : value).trim();
+	if(!/^[0-9]{1,5}$/.test(text)) {
+		return null;
 	}
-	return keepass.pluginUrlDefault;
+	var port = parseInt(text, 10);
+	return (port >= 1025 && port <= 65535) ? port : null;
+}
+
+keepass.getPluginUrl = function() {
+	var port = keepass.parsePort(page.settings.port) || keepass.defaultPort;
+	return "http://" + keepass.pluginHost + ":" + port + "/";
 }
 
 keepass.setCurrentKeePassHttpVersion = function(version) {
