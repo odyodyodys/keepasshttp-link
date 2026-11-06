@@ -7,7 +7,8 @@
     "lint:ext": "web-ext lint --source-dir ../src",
     "mock": "node mock-keepasshttp/server.js",
     "pages": "node pages/server.js",
-    "test": "node run.js"
+    "test": "node run.js",
+    "test:unit": "node --test unit/*.test.js"
   },
   "devDependencies": {
     "geckodriver": "8.0.0",

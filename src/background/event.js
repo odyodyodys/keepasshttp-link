@@ -91,6 +91,9 @@ cipevent.onLoadSettings = function(callback, tab) {
 
 cipevent.onLoadKeyRing = function(callback, tab) {
 	browser.storage.local.get({'keyRing': {}}).then(function(item) {
+		if(keepass.dropWeakKeys(item.keyRing) > 0) {
+			browser.storage.local.set({'keyRing': item.keyRing});
+		}
 		keepass.keyRing = item.keyRing;
 		if(keepass.isAssociated() && !keepass.keyRing[keepass.associated.hash]) {
 			keepass.associated = {

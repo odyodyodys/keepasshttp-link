@@ -50,24 +50,15 @@ var cryptoHelpers = {
 		return ret;
 	},
 
-	// get a random number in the range [min,max]
-	getRandom:function(min,max)
+	// Cryptographically secure random bytes (Web Crypto CSPRNG).
+	// Returns a plain array of numbers, as slowAES expects.
+	randomBytes:function(count)
 	{
-		if(min === null)
-			min = 0;
-		if(max === null)
-			max = 1;
-		return Math.floor(Math.random()*(max+1)) + min;
-	},
-
-	generateSharedKey:function(len)
-	{
-		if(len === null)
-			len = 16;
-		var key = [];
-		for(var i = 0; i < len*2; i++)
-			key.push(this.getRandom(0,255));
-		return key;
+		if(!Number.isInteger(count) || count <= 0 || count > 65536)
+			throw new Error("randomBytes: invalid byte count " + count);
+		var buf = new Uint8Array(count);
+		crypto.getRandomValues(buf);
+		return Array.from(buf);
 	},
 
 	generatePrivateKey:function(s,size)

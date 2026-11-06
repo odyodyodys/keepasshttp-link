@@ -5,7 +5,8 @@ keepass.isDatabaseClosed = false;
 keepass.isKeePassHttpAvailable = false;
 keepass.isEncryptionKeyUnrecognized = false;
 keepass.currentKeePassHttp = {"version": 0, "versionParsed": 0};
-keepass.keySize = 8; // wtf? stupid cryptoHelpers
+keepass.keyBytes = 32; // AES-256 key
+keepass.ivBytes = 16;  // AES block size
 keepass.pluginUrlDefault = "http://localhost:19455/";
 keepass.latestVersionUrl = "https://raw.githubusercontent.com/smorks/keepasshttp/master/latest-version.txt";
 keepass.cacheTimeout = 30 * 1000; // milliseconds
@@ -20,6 +21,8 @@ browser.storage.local.get({
 	'keyRing': {}})
 	.then((item) => {
 	keepass.latestKeePassHttp = item.latestKeePassHttp;
+	// in-memory filter only; migrateKeyRing() persists the removal
+	keepass.dropWeakKeys(item.keyRing);
 	keepass.keyRing = item.keyRing;
 });
 
@@ -227,7 +230,7 @@ keepass.associate = function(callback, tab) {
 
 		page.tabs[tab.id].errorMessage = null;
 
-		var rawKey = cryptoHelpers.generateSharedKey(keepass.keySize * 2);
+		var rawKey = cryptoHelpers.randomBytes(keepass.keyBytes);
 		var key = keepass.b64e(rawKey);
 
 		var request = {
@@ -359,14 +362,37 @@ keepass.migrateKeyRing = () => {
 						}
 					});
 				}
-				if (num > 0) {
+				var removed = keepass.dropWeakKeys(keyring);
+				if (num > 0 || removed > 0) {
 					browser.storage.local.set({ keyRing: keyring });
 				}
+				keepass.keyRing = keyring;
 			}
 			resolve();
 		});
 	});
 };
+
+// Keys created before keyGen 2 came from Math.random() and must not be used.
+// Removing them forces a new association with a key from the CSPRNG.
+keepass.keyGeneration = 2;
+
+keepass.dropWeakKeys = function(keyring) {
+	var removed = 0;
+	if (!keyring || typeof keyring !== "object") {
+		return removed;
+	}
+	for (var hash of Object.keys(keyring)) {
+		if (!keyring[hash] || keyring[hash].keyGen !== keepass.keyGeneration) {
+			delete keyring[hash];
+			removed++;
+		}
+	}
+	if (removed > 0) {
+		console.log("KeePassHttp-Connector: removed " + removed + " weak key(s); please connect to KeePass again.");
+	}
+	return removed;
+}
 
 keepass.saveKey = function(hash, id, key) {
 	if(!(hash in keepass.keyRing)) {
@@ -382,6 +408,7 @@ keepass.saveKey = function(hash, id, key) {
 		keepass.keyRing[hash].id = id;
 		keepass.keyRing[hash].key = key;
 	}
+	keepass.keyRing[hash].keyGen = keepass.keyGeneration;
 	browser.storage.local.set({'keyRing': keepass.keyRing});
 }
 
@@ -573,7 +600,7 @@ keepass.setVerifier = function(request, inputKey) {
 		request.Id = id;
 	}
 
-	var iv = cryptoHelpers.generateSharedKey(keepass.keySize);
+	var iv = cryptoHelpers.randomBytes(keepass.ivBytes);
 	request.Nonce = keepass.b64e(iv);
 
 	//var decodedKey = keepass.b64d(key);

@@ -171,7 +171,7 @@ async function associate(driver) {
     if (!USE_MOCK && !SETUP) {
       await toWebTab(driver);
       throw new Error(existsSync(KEYRING_FILE)
-        ? 'Saved test association was rejected by KeePass. Run once with SETUP=1 to create a new one.'
+        ? 'Saved test association was rejected (by the extension, e.g. an old weak key, or by KeePass). Run once with SETUP=1 to create a new one.'
         : 'No saved test association. Run once with SETUP=1 and confirm the KeePass dialog.');
     }
     if (!USE_MOCK) console.log('\n>>> Confirm the "associate" dialog in the TEST KeePass now (waiting up to 5 min) <<<\n');
@@ -303,6 +303,27 @@ const scenarios = {
       getLoginsOnLoad: stats?.byType['get-logins'] ?? 'n/a',
       autocompleteItemsOnFocus: s.autocompleteItemsVisible,
       autocompleteMenus: s.autocompleteMenus,
+    };
+  },
+
+  // Item 1: a key without keyGen (made by the old Math.random code) must be
+  // removed and not used. Restores the valid key afterwards.
+  async weakkey(driver) {
+    await openExtPage(driver, 'options/options.html');
+    const good = await readKeyRing(driver);
+    const weak = JSON.parse(JSON.stringify(good));
+    for (const h of Object.keys(weak)) delete weak[h].keyGen;
+    await restoreKeyRing(driver, weak);
+    const st = await extCall(driver, 'get_status');
+    const after = await readKeyRing(driver);
+    await restoreKeyRing(driver, good);
+    const back = await extCall(driver, 'get_status');
+    await toWebTab(driver);
+    return {
+      weakKeyAccepted: !!(st.r && st.r.associated),
+      keysLeftAfterLoad: Object.keys(after).length,
+      validKeyAcceptedAgain: !!(back.r && back.r.associated),
+      pass: !(st.r && st.r.associated) && Object.keys(after).length === 0 && !!(back.r && back.r.associated),
     };
   },
 
