@@ -404,33 +404,26 @@ window.addEventListener("resize", function() { cipAutocomplete.position(); });
 
 
 
+// Password generator (item 17b). Own code, no jQuery UI dialog. The key icons
+// and the dialog live in CLOSED shadow roots: page scripts cannot read the
+// generated password from the dialog, restyle it or press its buttons.
+// Styles via CSSOM (kphcStyle), so a page CSP does not block them.
 var cipPassword = {};
 
+// {host, inner, field (jQuery), size, offset}
 cipPassword.observedIcons = [];
 cipPassword.observingLock = false;
+cipPassword.dialog = null;
 
 cipPassword.init = function() {
 	if("initPasswordGenerator" in _called) {
 		return;
 	}
-
 	_called.initPasswordGenerator = true;
 
 	window.setInterval(function() {
 		cipPassword.checkObservedElements();
 	}, 400);
-
-	/* Append extension-local background-image URLs to
-		'generate password' icon CSS classes */
-	var make_keyicon_css = function(nested_class, icon_size) {
-		return ".cip-genpw-icon." + nested_class + " {" +
-			"background-image: url(" +
-			browser.runtime.getURL("/icons/key_"+icon_size+".png") +
-			"); }\n";
-	}
-	var styleStr = make_keyicon_css("cip-icon-key-small", "16x16") +
-		make_keyicon_css("cip-icon-key-big", "24x24");
-	cIPJQ('<style>'+styleStr+'</style>').appendTo('head');
 }
 
 cipPassword.initField = function(field, inputs, pos) {
@@ -444,7 +437,6 @@ cipPassword.initField = function(field, inputs, pos) {
 	field.data("cip-password-generator", true);
 
 	cipPassword.createIcon(field);
-	cipPassword.createDialog();
 
 	var $found = false;
 	if(inputs) {
@@ -461,294 +453,316 @@ cipPassword.initField = function(field, inputs, pos) {
 	field.data("cip-genpw-next-field-exists", $found);
 }
 
-cipPassword.createDialog = function() {
-	if("passwordCreateDialog" in _called) {
-		return;
-	}
-
-	_called.passwordCreateDialog = true;
-
-	var $dialog = cIPJQ("<div>")
-		.attr("id", "cip-genpw-dialog");
-
-	var $divFloat = cIPJQ("<div>").addClass("cip-genpw-clearfix");
-	var $btnGenerate = cIPJQ("<button>")
-		.text("Generate")
-		.attr("id", "cip-genpw-btn-generate")
-		.addClass("b2c-btn")
-		.addClass("b2c-btn-primary")
-		.addClass("b2c-btn-small")
-		.css("float", "left")
-		.click(function(e) {
-			e.preventDefault();
-			// Real click, or the internal call when the dialog opens (see open below).
-			if(!kphcIsTrusted(e) && !cipPassword.generateOnOpen) {
-				return;
-			}
-			cipPassword.generateOnOpen = false;
-			browser.runtime.sendMessage({
-				action: "generate_password"
-			}).then(cipPassword.callbackGeneratedPassword);
-		});
-	$divFloat.append($btnGenerate);
-
-	var $btnClipboard = cIPJQ("<button>")
-		.text("Copy to clipboard")
-		.attr("id", "cip-genpw-btn-clipboard")
-		.addClass("b2c-btn")
-		.addClass("b2c-btn-small")
-		.css("float", "right")
-		.click(function(e) {
-			e.preventDefault();
-			if(kphcIsTrusted(e)) {
-				cipPassword.copyPasswordToClipboard();
-			}
-		});
-
-	$divFloat.append($btnClipboard);
-
-	$dialog.append($divFloat);
-
-	var $textfieldPassword = cIPJQ("<input>")
-		.attr("id", "cip-genpw-textfield-password")
-		.attr("type", "text")
-		.addClass("cip-genpw-textfield")
-		.on('change keypress paste textInput input', function() {
-			cIPJQ("#cip-genpw-btn-clipboard:first").removeClass("b2c-btn-success");
-		});
-	var $quality = cIPJQ("<span>")
-		.addClass("b2c-add-on")
-		.attr("id", "cip-genpw-quality")
-		.text("123 Bits");
-	var $frameInputAppend = cIPJQ("<div>")
-		.addClass("b2c-input-append")
-		.addClass("cip-genpw-password-frame");
-	$frameInputAppend.append($textfieldPassword).append($quality);
-	$dialog.append($frameInputAppend);
-
-	var $checkboxNextField = cIPJQ("<input>")
-		.attr("id", "cip-genpw-checkbox-next-field")
-		.attr("type", "checkbox")
-		.addClass("cip-genpw-checkbox");
-	var $labelNextField = cIPJQ("<label>")
-		.append($checkboxNextField)
-		.addClass("cip-genpw-label")
-		.append(" also fill in the next password-field");
-	$dialog.append($labelNextField);
-
-	var $btnFillIn = cIPJQ("<button>")
-		.text("Fill in & copy to clipboard")
-		.attr("id", "cip-genpw-btn-fillin")
-		.addClass("b2c-btn")
-		.addClass("b2c-btn-small")
-		.click(function(e) {
-			e.preventDefault();
-			if(!kphcIsTrusted(e)) {
-				return;
-			}
-
-			var fieldId = cIPJQ("#cip-genpw-dialog:first").data("cip-genpw-field-id");
-			var field = cIPJQ("input[data-cip-id='"+fieldId+"']:first");
-			if(field.length == 1) {
-				var $password = cIPJQ("input#cip-genpw-textfield-password:first").val();
-
-				if(field.attr("maxlength")) {
-					if($password.length > field.attr("maxlength")) {
-						$password = $password.substring(0, field.attr("maxlength"));
-						cIPJQ("input#cip-genpw-textfield-password:first").val($password);
-						cIPJQ("#cip-genpw-btn-clipboard:first").removeClass("b2c-btn-success");
-						alert("The generated password is longer than the allowed length!\nIt has been cut to fit the length.\n\nPlease remember the new password!");
-					}
-				}
-
-				field.val($password);
-				if(cIPJQ("input#cip-genpw-checkbox-next-field:checked").length == 1) {
-					if(field.data("cip-genpw-next-field-exists")) {
-						var nextFieldId = field.data("cip-genpw-next-field-id");
-						var nextField = cIPJQ("input[data-cip-id='"+nextFieldId+"']:first");
-						if(nextField.length == 1) {
-							nextField.val($password);
-						}
-					}
-				}
-
-				cipPassword.copyPasswordToClipboard();
-			}
-		});
-	$dialog.append($btnFillIn);
-
-	var $container = cIPJQ('#kphc-pw-dialog');
-	if ($container.length == 0) {
-		cIPJQ('<div id="kphc-pw-dialog" class="kphc"></div>').appendTo('body');
-	}
-
-	$dialog.dialog({
-		appendTo: '#kphc-pw-dialog',
-		closeText: "×",
-		autoOpen: false,
-		modal: true,
-		resizable: false,
-		minWidth: 340,
-		title: "Password Generator",
-		open: function(event, ui) {
-			cIPJQ(".ui-widget-overlay").click(function() {
-				cIPJQ("#cip-genpw-dialog:first").dialog("close");
-			});
-
-			if(cIPJQ("input#cip-genpw-textfield-password:first").val() == "") {
-				cipPassword.generateOnOpen = true;
-				cIPJQ("button#cip-genpw-btn-generate:first").click();
-			}
-		}
-	});
+// A small key drawn with SVG (no image file, no extension URL in the page).
+cipPassword.keyIcon = function(size) {
+	var NS = "http://www.w3.org/2000/svg";
+	var svg = document.createElementNS(NS, "svg");
+	svg.setAttribute("width", String(size));
+	svg.setAttribute("height", String(size));
+	svg.setAttribute("viewBox", "0 0 24 24");
+	svg.setAttribute("aria-hidden", "true");
+	var head = document.createElementNS(NS, "circle");
+	head.setAttribute("cx", "7.5");
+	head.setAttribute("cy", "12");
+	head.setAttribute("r", "4.5");
+	head.setAttribute("fill", "none");
+	head.setAttribute("stroke", "#1f5fbf");
+	head.setAttribute("stroke-width", "2.5");
+	var shaft = document.createElementNS(NS, "path");
+	shaft.setAttribute("d", "M12 12h10M18 12v4M21 12v3");
+	shaft.setAttribute("fill", "none");
+	shaft.setAttribute("stroke", "#1f5fbf");
+	shaft.setAttribute("stroke-width", "2.5");
+	shaft.setAttribute("stroke-linecap", "round");
+	svg.appendChild(head);
+	svg.appendChild(shaft);
+	return svg;
 }
 
 cipPassword.createIcon = function(field) {
-	var $className = (field.outerHeight() > 28) ? "cip-icon-key-big" : "cip-icon-key-small";
-	var $size = (field.outerHeight() > 28) ? 24 : 16;
-	var $offset = Math.floor((field.outerHeight() - $size) / 3);
-	$offset = ($offset < 0) ? 0 : $offset;
+	var size = (field.outerHeight() > 28) ? 24 : 16;
+	var offset = Math.floor((field.outerHeight() - size) / 3);
+	offset = (offset < 0) ? 0 : offset;
 
-	var $zIndex = 0;
-	var $zIndexField = field;
-	var z;
+	var zIndex = 0;
+	var zField = field;
 	var c = 0;
-	while($zIndexField.length > 0) {
-		if(c > 100 || $zIndexField[0].nodeName == "#document") {
+	while(zField.length > 0) {
+		if(c > 100 || zField[0].nodeName == "#document") {
 			break;
 		}
-		z = $zIndexField.css("z-index");
-		if(!isNaN(z) && parseInt(z) > $zIndex) {
-			$zIndex = parseInt(z);
+		var z = zField.css("z-index");
+		if(!isNaN(z) && parseInt(z) > zIndex) {
+			zIndex = parseInt(z);
 		}
-		$zIndexField = $zIndexField.parent();
+		zField = zField.parent();
 		c++;
 	}
-
-	if(isNaN($zIndex) || $zIndex < 1) {
-		$zIndex = 1;
+	if(isNaN(zIndex) || zIndex < 1) {
+		zIndex = 1;
 	}
-	$zIndex += 1;
+	zIndex += 1;
 
-	var $icon = cIPJQ("<div>")
-		.addClass('kphc')
-		.addClass("cip-genpw-icon")
-		.addClass($className)
-		.css("z-index", $zIndex)
-		.data("size", $size)
-		.data("offset", $offset)
-		.data("cip-genpw-field-id", field.data("cip-id"));
-	cipPassword.setIconPosition($icon, field);
-	$icon.click(function(e) {
+	var host = document.createElement("kphc-key");
+	kphcStyle(host, { "all": "initial", "position": "absolute", "display": "block",
+		"width": size + "px", "height": size + "px", "z-index": String(zIndex), "cursor": "pointer" });
+	var root = host.attachShadow({ mode: "closed" });
+	var inner = document.createElement("div");
+	inner.setAttribute("role", "button");
+	inner.setAttribute("title", "Generate a password (KeePass)");
+	kphcStyle(inner, { "width": size + "px", "height": size + "px", "cursor": "pointer" });
+	inner.appendChild(cipPassword.keyIcon(size));
+	root.appendChild(inner);
+
+	var icon = { host: host, inner: inner, field: field, size: size, offset: offset };
+	inner.addEventListener("click", function(e) {
 		e.preventDefault();
 		if(!kphcIsTrusted(e)) {
 			return;
 		}
-
 		if(!field.is(":visible")) {
-			$icon.remove();
+			cipPassword.removeIcon(icon);
 			field.removeData("cip-password-generator");
 			return;
 		}
-
-		var $dialog = cIPJQ("#cip-genpw-dialog");
-		if($dialog.dialog("isOpen")) {
-			$dialog.dialog("close");
-		}
-		$dialog.dialog("option", "position", { my: "left-10px top", at: "center bottom", of: cIPJQ(this) });
-		$dialog.data("cip-genpw-field-id", field.data("cip-id"));
-		$dialog.data("cip-genpw-next-field-id", field.data("cip-genpw-next-field-id"));
-		$dialog.data("cip-genpw-next-is-password-field", field.data("cip-genpw-next-is-password-field"));
-
-		var $bool = Boolean(field.data("cip-genpw-next-field-exists"));
-		cIPJQ("input#cip-genpw-checkbox-next-field:first")
-			.attr("checked", $bool)
-			.attr("disabled", !$bool);
-
-		$dialog.dialog("open");
+		cipPassword.openDialog(field, host);
 	});
 
-	cipPassword.observedIcons.push($icon);
-
-	cIPJQ("body").append($icon);
+	cipPassword.observedIcons.push(icon);
+	document.documentElement.appendChild(host);
+	cipPassword.setIconPosition(icon);
 }
 
-cipPassword.setIconPosition = function($icon, $field) {
-	$icon.css("top", $field.offset().top + $icon.data("offset") + 1)
-		.css("left", $field.offset().left + $field.outerWidth() - $icon.data("size") - $icon.data("offset"))
-}
-
-cipPassword.copyPasswordToClipboard = function(e) {
-	if (e) {
-		e.preventDefault();
+cipPassword.removeIcon = function(icon) {
+	if(icon.host.parentNode) {
+		icon.host.parentNode.removeChild(icon.host);
 	}
+	var i = cipPassword.observedIcons.indexOf(icon);
+	if(i >= 0) {
+		cipPassword.observedIcons.splice(i, 1);
+	}
+}
 
-	var input = cIPJQ("input#cip-genpw-textfield-password");
-	input.select()
+cipPassword.setIconPosition = function(icon) {
+	var r = icon.field[0].getBoundingClientRect();
+	kphcStyle(icon.host, {
+		"top": Math.round(r.top + window.scrollY + icon.offset + 1) + "px",
+		"left": Math.round(r.left + window.scrollX + r.width - icon.size - icon.offset) + "px"
+	});
+}
+
+cipPassword.button = function(text, primary) {
+	var b = document.createElement("button");
+	b.type = "button";
+	b.textContent = text;
+	kphcStyle(b, { "font": "12px Verdana, Arial, sans-serif", "padding": "3px 8px", "margin": "0 4px 4px 0",
+		"border": "1px solid " + (primary ? "#1f5fbf" : "#999999"), "border-radius": "3px", "cursor": "pointer",
+		"background": primary ? "#2a6fd6" : "#f2f2f2", "color": primary ? "#ffffff" : "#222222" });
+	return b;
+}
+
+cipPassword.ensureDialog = function() {
+	if(cipPassword.dialog && cipPassword.dialog.host.isConnected) {
+		return cipPassword.dialog;
+	}
+	var d = {};
+	d.host = document.createElement("kphc-pwgen");
+	kphcStyle(d.host, { "all": "initial", "display": "none" });
+	var root = d.host.attachShadow({ mode: "closed" });
+
+	d.overlay = document.createElement("div");
+	kphcStyle(d.overlay, { "position": "fixed", "left": "0", "top": "0", "right": "0", "bottom": "0",
+		"background": "rgba(0,0,0,0.15)", "z-index": "2147483646" });
+	d.box = document.createElement("div");
+	d.box.setAttribute("role", "dialog");
+	d.box.setAttribute("aria-label", "Password Generator");
+	kphcStyle(d.box, { "position": "fixed", "z-index": "2147483647", "width": "340px", "box-sizing": "border-box",
+		"background": "#ffffff", "border": "1px solid #888888", "border-radius": "4px", "padding": "8px 10px",
+		"box-shadow": "0 4px 12px rgba(0,0,0,0.3)", "font": "12px Verdana, Arial, sans-serif", "color": "#222222",
+		"text-align": "left" });
+
+	var title = document.createElement("div");
+	kphcStyle(title, { "font-weight": "bold", "margin-bottom": "8px", "display": "flex", "justify-content": "space-between" });
+	var titleText = document.createElement("span");
+	titleText.textContent = "Password Generator";
+	d.btnClose = document.createElement("span");
+	d.btnClose.setAttribute("role", "button");
+	d.btnClose.setAttribute("aria-label", "Close");
+	d.btnClose.textContent = "×";
+	kphcStyle(d.btnClose, { "cursor": "pointer", "font-size": "16px", "line-height": "12px" });
+	title.appendChild(titleText);
+	title.appendChild(d.btnClose);
+
+	d.btnGenerate = cipPassword.button("Generate", true);
+	d.btnClipboard = cipPassword.button("Copy to clipboard", false);
+	d.input = document.createElement("input");
+	d.input.type = "text";
+	d.input.setAttribute("aria-label", "Generated password");
+	kphcStyle(d.input, { "width": "240px", "font": "12px monospace", "padding": "2px 4px", "border": "1px solid #aaaaaa",
+		"margin": "6px 4px 6px 0", "color": "#222222", "background": "#ffffff" });
+	d.quality = document.createElement("span");
+	d.quality.textContent = "";
+	d.label = document.createElement("label");
+	kphcStyle(d.label, { "display": "block", "margin": "4px 0 8px 0" });
+	d.checkbox = document.createElement("input");
+	d.checkbox.type = "checkbox";
+	d.label.appendChild(d.checkbox);
+	d.label.appendChild(document.createTextNode(" also fill in the next password-field"));
+	d.btnFillIn = cipPassword.button("Fill in & copy to clipboard", false);
+	d.message = document.createElement("div");
+	d.message.setAttribute("role", "status");
+	kphcStyle(d.message, { "color": "#b00020", "margin-top": "4px", "white-space": "pre-line" });
+
+	var row = document.createElement("div");
+	row.appendChild(d.btnGenerate);
+	row.appendChild(d.btnClipboard);
+	var pwRow = document.createElement("div");
+	pwRow.appendChild(d.input);
+	pwRow.appendChild(d.quality);
+	d.box.appendChild(title);
+	d.box.appendChild(row);
+	d.box.appendChild(pwRow);
+	d.box.appendChild(d.label);
+	d.box.appendChild(d.btnFillIn);
+	d.box.appendChild(d.message);
+	root.appendChild(d.overlay);
+	root.appendChild(d.box);
+
+	// Only real user clicks act (a page script cannot reach these elements,
+	// and its events are not trusted).
+	var onTrusted = function(el, fn) {
+		el.addEventListener("click", function(e) {
+			e.preventDefault();
+			if(kphcIsTrusted(e)) {
+				fn();
+			}
+		});
+	};
+	onTrusted(d.overlay, cipPassword.closeDialog);
+	onTrusted(d.btnClose, cipPassword.closeDialog);
+	onTrusted(d.btnGenerate, cipPassword.generate);
+	onTrusted(d.btnClipboard, function() { cipPassword.copyPasswordToClipboard(); });
+	onTrusted(d.btnFillIn, cipPassword.fillIn);
+	d.input.addEventListener("input", function() { d.message.textContent = ""; });
+	d.box.addEventListener("keydown", function(e) {
+		if(e.key === "Escape" && kphcIsTrusted(e)) {
+			e.preventDefault();
+			cipPassword.closeDialog();
+		}
+	});
+
+	document.documentElement.appendChild(d.host);
+	cipPassword.dialog = d;
+	return d;
+}
+
+cipPassword.openDialog = function(field, iconHost) {
+	var d = cipPassword.ensureDialog();
+	d.field = field;
+	var nextExists = Boolean(field.data("cip-genpw-next-field-exists"));
+	d.checkbox.checked = nextExists;
+	d.checkbox.disabled = !nextExists;
+	d.message.textContent = "";
+	var r = iconHost.getBoundingClientRect();
+	kphcStyle(d.box, {
+		"left": Math.max(0, Math.round(r.left + r.width / 2 - 10)) + "px",
+		"top": Math.round(r.bottom + 2) + "px"
+	});
+	kphcStyle(d.host, { "display": "block" });
+	d.input.focus();
+	if(d.input.value == "") {
+		cipPassword.generate();
+	}
+}
+
+cipPassword.closeDialog = function() {
+	if(cipPassword.dialog) {
+		kphcStyle(cipPassword.dialog.host, { "display": "none" });
+	}
+}
+
+cipPassword.generate = function() {
+	browser.runtime.sendMessage({
+		action: "generate_password"
+	}).then(cipPassword.callbackGeneratedPassword);
+}
+
+cipPassword.copyPasswordToClipboard = function() {
+	var d = cipPassword.dialog;
+	if(!d) {
+		return false;
+	}
+	d.input.select();
 	var success = document.execCommand("copy");
-	if(success) {
-		cIPJQ("#cip-genpw-btn-clipboard").addClass("b2c-btn-success");
+	d.message.textContent = success ? "" : "Could not copy to the clipboard.";
+	kphcStyle(d.btnClipboard, { "background": success ? "#3c9a3c" : "#f2f2f2", "color": success ? "#ffffff" : "#222222" });
+	return success;
+}
+
+cipPassword.fillIn = function() {
+	var d = cipPassword.dialog;
+	var field = d && d.field;
+	if(!field || field.length != 1 || !field[0].isConnected) {
+		return;
 	}
-	cIPJQ("#cip-genpw-dialog").select();
+	var password = d.input.value;
+	var max = parseInt(field.attr("maxlength"), 10);
+	if(max > 0 && password.length > max) {
+		password = password.substring(0, max);
+		d.input.value = password;
+		d.message.textContent = "The generated password was longer than the field allows.\nIt was cut to " + max + " characters. Please remember the new password.";
+	}
+	cip.setValueWithChange(field, password);
+	if(d.checkbox.checked && field.data("cip-genpw-next-field-exists")) {
+		var nextField = _f(field.data("cip-genpw-next-field-id"));
+		if(nextField) {
+			cip.setValueWithChange(nextField, password);
+		}
+	}
+	cipPassword.copyPasswordToClipboard();
 }
 
 cipPassword.callbackGeneratedPassword = function(entries) {
+	var d = cipPassword.dialog;
+	if(!d) {
+		return;
+	}
 	if(entries && entries.length >= 1) {
-		cIPJQ("#cip-genpw-btn-clipboard:first").removeClass("b2c-btn-success");
-		cIPJQ("input#cip-genpw-textfield-password:first").val(entries[0].Password);
-		if(isNaN(entries[0].Login)) {
-			cIPJQ("#cip-genpw-quality:first").text("??? Bits");
-		}
-		else {
-			cIPJQ("#cip-genpw-quality:first").text(entries[0].Login + " Bits");
-		}
+		kphcStyle(d.btnClipboard, { "background": "#f2f2f2", "color": "#222222" });
+		d.input.value = entries[0].Password;
+		d.quality.textContent = isNaN(entries[0].Login) ? "??? Bits" : (entries[0].Login + " Bits");
+		d.message.textContent = "";
 	}
 	else {
-		if(cIPJQ("div#cip-genpw-error:first").length == 0) {
-			cIPJQ("button#cip-genpw-btn-generate:first").after("<div style='block' id='cip-genpw-error'>Cannot receive generated password.<br />Is your version of KeePassHttp up-to-date?<br /><br /><a href='https://github.com/pfn/keepasshttp/'>Please visit the KeePassHttp homepage</a></div>");
-			cIPJQ("input#cip-genpw-textfield-password:first").parent().hide();
-			cIPJQ("input#cip-genpw-checkbox-next-field:first").parent("label").hide();
-			cIPJQ("button#cip-genpw-btn-generate").hide();
-			cIPJQ("button#cip-genpw-btn-clipboard").hide();
-			cIPJQ("button#cip-genpw-btn-fillin").hide();
-		}
+		d.message.textContent = "Cannot receive a generated password.\nIs KeePass running, and is KeePassHttp 2.3 or newer installed?";
 	}
 }
 
 cipPassword.onRequestPassword = function() {
-	browser.runtime.sendMessage({
-		'action': 'generate_password'
-	}).then(cipPassword.callbackGeneratedPassword);
+	cipPassword.generate();
 }
 
 cipPassword.checkObservedElements = function() {
 	if(cipPassword.observingLock) {
 		return;
 	}
-
 	cipPassword.observingLock = true;
-	cIPJQ.each(cipPassword.observedIcons, function(index, iconField) {
-		if(iconField && iconField.length == 1) {
-			var fieldId = iconField.data("cip-genpw-field-id");
-			var field = cIPJQ("input[data-cip-id='"+fieldId+"']:first");
-			if(!field || field.length != 1) {
-				iconField.remove();
-				cipPassword.observedIcons.splice(index, 1);
-			}
-			else if(!field.is(":visible")) {
-				iconField.hide();
-				//field.removeData("cip-password-generator");
-			}
-			else if(field.is(":visible")) {
-				iconField.show();
-				cipPassword.setIconPosition(iconField, field);
-				field.data("cip-password-generator", true);
-			}
+	var icons = cipPassword.observedIcons.slice();
+	for(var i = 0; i < icons.length; i++) {
+		var icon = icons[i];
+		var field = icon.field;
+		if(!field || field.length != 1 || !field[0].isConnected) {
+			cipPassword.removeIcon(icon);
+		}
+		else if(!field.is(":visible")) {
+			kphcStyle(icon.host, { "display": "none" });
 		}
 		else {
-			cipPassword.observedIcons.splice(index, 1);
+			kphcStyle(icon.host, { "display": "block" });
+			cipPassword.setIconPosition(icon);
+			field.data("cip-password-generator", true);
 		}
-	});
+	}
 	cipPassword.observingLock = false;
 }
 

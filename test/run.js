@@ -236,7 +236,7 @@ async function pageState(driver) {
   const s = await driver.executeScript(function () {
     return {
       events: (window.__kph && window.__kph.events) || [],
-      genpwIcons: document.querySelectorAll('.cip-genpw-icon').length,
+      genpwIcons: document.querySelectorAll('kphc-key').length,
       usernameLen: (document.getElementById('username') || {}).value?.length ?? null,
       passwordLen: (document.getElementById('password') || {}).value?.length ?? null,
     };
@@ -797,22 +797,27 @@ scenarios.untrusted = async function (driver) {
   await clear();
 
   // F: page script clicks the password generator icon: no dialog, no request.
-  const genState = () => driver.executeScript(function () {
-    const d = document.getElementById('cip-genpw-dialog');
-    const t = document.getElementById('cip-genpw-textfield-password');
-    return { open: !!(d && d.offsetParent !== null), generatedLen: t ? t.value.length : 0 };
-  });
+  // Item 17b: icon and dialog are in closed shadow roots (read with WebDriver).
+  const genState = async () => {
+    const hosts = await driver.findElements(By.css('kphc-pwgen'));
+    if (!hosts.length) return { open: false, generatedLen: 0 };
+    const sr = await hosts[0].getShadowRoot();
+    if (!(await (await sr.findElement(By.css('[role=dialog]'))).isDisplayed())) return { open: false, generatedLen: 0 };
+    const input = await sr.findElement(By.css('input[type=text]'));
+    return { open: true, generatedLen: String(await input.getProperty('value')).length,
+      pageSeesShadow: await driver.executeScript("return document.querySelector('kphc-pwgen').shadowRoot !== null") };
+  };
   await kphReset();
-  out.fakeIconClick = await driver.executeScript("const i = document.querySelector('.cip-genpw-icon'); if (!i) return 'no-icon'; i.click(); return 'clicked';");
+  out.fakeIconClick = await driver.executeScript("const i = document.querySelector('kphc-key'); if (!i) return 'no-icon'; if (i.shadowRoot) return 'shadow-visible'; i.click(); i.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true })); return 'clicked';");
   await sleep(1500);
   out.afterFakeIconClick = Object.assign(await genState(), { requests: (await kphStats())?.byType['generate-password'] ?? 0 });
   // Positive G: real click on the icon opens the generator and generates.
-  await driver.findElement(By.css('.cip-genpw-icon')).click();
+  await driver.findElement(By.css('kphc-key')).click();
   await sleep(1500);
   out.afterRealIconClick = Object.assign(await genState(), { requests: (await kphStats())?.byType['generate-password'] ?? 0 });
   out.pass = out.fakeClick === 'clicked-host' && out.afterFakeClick[1] === 0 && out.afterFakeKeys[1] === 0 &&
     out.fakeIconClick === 'clicked' && !out.afterFakeIconClick.open && out.afterFakeIconClick.requests === 0 &&
-    out.afterRealIconClick.open && out.afterRealIconClick.generatedLen > 0 &&
+    out.afterRealIconClick.open && out.afterRealIconClick.generatedLen > 0 && out.afterRealIconClick.pageSeesShadow === false &&
     out.afterScriptBlur[1] === 0 && out.afterRealKeys[1] > 0 && out.afterTypedTab[1] > 0;
   return out;
 };
@@ -840,9 +845,11 @@ scenarios.lock = async function (driver) {
   try {
     await setTamper('locked');
     // A real user action that makes the background talk to KeePass.
-    await driver.findElement(By.css('.cip-genpw-icon')).click();
+    await driver.findElement(By.css('kphc-key')).click();
     await sleep(1500);
-    await driver.switchTo().activeElement().sendKeys(Key.ESCAPE);
+    // Close the generator with Escape (its input inside the closed shadow root has the focus).
+    const gsr = await (await driver.findElement(By.css('kphc-pwgen'))).getShadowRoot();
+    await (await gsr.findElement(By.css('input[type=text]'))).sendKeys(Key.ESCAPE);
     await sleep(500);
     out.whileLocked = await items();
   } finally {
@@ -923,6 +930,40 @@ scenarios.csp = async function (driver) {
   const cspActive = await driver.executeScript("const x = document.createElement('div'); x.setAttribute('style', 'color: rgb(1, 2, 3)'); document.body.appendChild(x); const c = getComputedStyle(x).color; x.remove(); return c !== 'rgb(1, 2, 3)';");
   return { cspActive, items: d.items, border, pageSeesShadow: d.pageSeesShadow, passwordLen: s.passwordLen,
     pass: cspActive && d.items.length === 2 && border === 'rgb(170, 170, 170)' && d.pageSeesShadow === false && s.passwordLen > 0 };
+};
+
+// Item 17b: password generator in closed shadow roots, on a strict-CSP page.
+// Real clicks: open, generate, "Fill in & copy" fills the field and the clipboard.
+async function readClipboard(driver) {
+  await driver.setContext(firefox.Context.CHROME);
+  try {
+    return await driver.executeAsyncScript(function (done) {
+      navigator.clipboard.readText().then(done, (e) => done('ERR ' + e));
+    });
+  } finally {
+    await driver.setContext(firefox.Context.CONTENT);
+  }
+}
+scenarios.generator = async function (driver) {
+  await configure(driver, { autoFillSingleEntry: false });
+  await driver.get(PAGES_TLS.replace('{host}', 'multi') + '/login-csp.html');
+  await sleep(3500);
+  const icon = await driver.findElement(By.css('kphc-key'));
+  const iconSize = await icon.getRect();
+  await icon.click();
+  await sleep(1500);
+  const sr = await (await driver.findElement(By.css('kphc-pwgen'))).getShadowRoot();
+  const generated = String(await (await sr.findElement(By.css('input[type=text]'))).getProperty('value'));
+  const buttons = await sr.findElements(By.css('button'));
+  let fillBtn = null;
+  for (const b of buttons) if ((await b.getText()).startsWith('Fill in')) fillBtn = b;
+  await fillBtn.click();
+  await sleep(800);
+  const fieldValue = await driver.executeScript("return document.getElementById('password').value");
+  const clip = await readClipboard(driver);
+  return { iconSize: [iconSize.width, iconSize.height], generatedLen: generated.length,
+    fieldMatches: fieldValue === generated, clipboardMatches: clip === generated,
+    pass: iconSize.width === 16 && generated.length > 0 && fieldValue === generated && clip === generated };
 };
 
 // Values and dropdown inside #frame, after focusing its username field.

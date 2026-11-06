@@ -19,66 +19,6 @@
 	display: none !important;
 }
 
-#cip-genpw-dialog {
-	text-align: left !important;
-}
-#cip-genpw-dialog button {
-	height: 26px !important;
-}
-.cip-genpw-clearfix:after {
-	clear: both;
-	line-height: 0;
-	content: "";
-	display: table;
-}
-.cip-genpw-icon {
-	position: absolute;
-	cursor: pointer;
-}
-.cip-genpw-icon.cip-icon-key-small {
-	width: 16px;
-	height: 16px;
-}
-.cip-genpw-icon.cip-icon-key-big {
-	width: 24px;
-	height: 24px;
-}
-.cip-genpw-password-frame {
-	margin-top: 5px !important;
-	margin-bottom: 5px !important;
-}
-.cip-genpw-password-frame > * {
-	height: 20px !important;
-	font-size: 11px !important;
-}
-.cip-genpw-textfield {
-	background: none !important;
-	font-size: 11px !important;
-	display: inline !important;
-	border: 1px solid rgb(170, 170, 170) !important;
-	padding: 1px 2px !important;
-	max-width: none !important;
-	min-width: 0 !important;
-	font-size: 1em !important;
-	width: 240px !important;
-	padding-left: 5px !important;
-}
-#cip-genpw-quality {
-	width: 50px !important;
-	padding-top: 1px !important;
-	padding-bottom: 1px !important;
-}
-.cip-genpw-label {
-	display: block !important;
-	margin: 5px 0 !important;
-}
-.cip-genpw-checkbox {
-	vertical-align: middle !important;
-}
-#cip-genpw-btn-fillin {
-	margin-right: 5px;
-}
-
 .b2c-modal-backdrop {
 	position: fixed;
 	top: 0;
