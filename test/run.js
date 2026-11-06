@@ -1123,6 +1123,28 @@ scenarios.maxlength = async function (driver) {
   }
 };
 
+// Item 18: no polling. The key icon follows its field when the page layout
+// changes (MutationObserver), and after a scroll.
+scenarios.iconmove = async function (driver) {
+  await configure(driver, { autoFillSingleEntry: false });
+  await driver.get(PAGES_TLS.replace('{host}', 'single') + '/login-move.html');
+  await sleep(800);
+  const where = async () => {
+    const f = await (await driver.findElement(By.id('password'))).getRect();
+    const i = await (await driver.findElement(By.css('kphc-key'))).getRect();
+    const inside = i.y >= f.y - 1 && i.y + i.height <= f.y + f.height + 1 && i.x >= f.x && i.x + i.width <= f.x + f.width + 1;
+    return { fieldY: Math.round(f.y), iconY: Math.round(i.y), inside };
+  };
+  const before = await where();
+  await sleep(2500); // banner inserted at 1.5 s
+  const afterMove = await where();
+  await driver.executeScript('window.scrollTo(0, 120)');
+  await sleep(400);
+  const afterScroll = await where();
+  return { before, afterMove, afterScroll,
+    pass: before.inside && afterMove.inside && afterMove.fieldY - before.fieldY >= 150 && afterScroll.inside };
+};
+
 // ---------- main ----------
 const wanted = process.argv.slice(2).filter((a) => scenarios[a]);
 const names = wanted.length ? wanted : Object.keys(scenarios);

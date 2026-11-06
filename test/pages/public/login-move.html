@@ -1,0 +1,14 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Login form that moves</title><script src="/instrument.js"></script></head>
+<body>
+  <h1>Test login (dummy); a banner is inserted above the form after 1.5 s</h1>
+  <div id="slot"></div>
+  <form id="f" action="/submitted" method="post">
+    <input type="text" name="username" id="username" autocomplete="username">
+    <input type="password" name="password" id="password" autocomplete="current-password">
+    <button type="submit">Sign in</button>
+  </form>
+  <script src="/move.js"></script>
+</body>
+</html>

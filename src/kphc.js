@@ -148,6 +148,106 @@ function _fs(fieldId) {
 
 
 
+// Item 18: one MutationObserver instead of polling timers. It watches the page
+// while it is needed: to find login fields that appear later, and to keep the
+// key icons next to their fields. Changes to our own <kphc-*> elements are
+// ignored (no loop). At most one check per 250 ms.
+var kphcObserver = {
+	mo: null,
+	ro: null,
+	timer: null,
+	frame: null,
+	wantDetect: false
+};
+
+kphcObserver.isOwn = function(node) {
+	return !!(node && node.nodeType === 1 && node.tagName.indexOf("KPHC-") === 0);
+}
+
+kphcObserver.relevant = function(records) {
+	for (var i = 0; i < records.length; i++) {
+		var r = records[i];
+		if (r.type === "attributes") {
+			if (!kphcObserver.isOwn(r.target)) {
+				return true;
+			}
+			continue;
+		}
+		var nodes = Array.prototype.slice.call(r.addedNodes).concat(Array.prototype.slice.call(r.removedNodes));
+		for (var j = 0; j < nodes.length; j++) {
+			if (!kphcObserver.isOwn(nodes[j])) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+kphcObserver.needed = function() {
+	return kphcObserver.wantDetect || cipPassword.observedIcons.length > 0;
+}
+
+// Connect or disconnect, as needed.
+kphcObserver.update = function() {
+	if (kphcObserver.needed() && !kphcObserver.mo) {
+		kphcObserver.mo = new MutationObserver(function(records) {
+			if (kphcObserver.relevant(records)) {
+				kphcObserver.schedule();
+			}
+		});
+		kphcObserver.mo.observe(document.documentElement, { childList: true, subtree: true,
+			attributes: true, attributeFilter: ["style", "class", "hidden", "type", "disabled"] });
+		window.addEventListener("scroll", kphcObserver.onViewport, true);
+		window.addEventListener("resize", kphcObserver.onViewport);
+		document.addEventListener("visibilitychange", kphcObserver.schedule);
+		kphcObserver.schedule();
+	}
+	else if (!kphcObserver.needed() && kphcObserver.mo) {
+		kphcObserver.mo.disconnect();
+		kphcObserver.mo = null;
+		window.removeEventListener("scroll", kphcObserver.onViewport, true);
+		window.removeEventListener("resize", kphcObserver.onViewport);
+		document.removeEventListener("visibilitychange", kphcObserver.schedule);
+	}
+}
+
+kphcObserver.schedule = function() {
+	if (kphcObserver.timer === null) {
+		kphcObserver.timer = setTimeout(kphcObserver.run, 250);
+	}
+}
+
+// Scroll / resize: move the icons on the next frame (no 250 ms delay).
+kphcObserver.onViewport = function() {
+	if (kphcObserver.frame === null) {
+		kphcObserver.frame = requestAnimationFrame(function() {
+			kphcObserver.frame = null;
+			cipPassword.checkObservedElements();
+		});
+	}
+}
+
+// A field with an icon changed size without a DOM change (e.g. CSS layout).
+kphcObserver.watchSize = function(field) {
+	if (typeof ResizeObserver === "undefined") {
+		return;
+	}
+	if (!kphcObserver.ro) {
+		kphcObserver.ro = new ResizeObserver(kphcObserver.onViewport);
+	}
+	kphcObserver.ro.observe(field);
+}
+
+kphcObserver.run = function() {
+	kphcObserver.timer = null;
+	if (kphcObserver.wantDetect && document.visibilityState !== "hidden") {
+		cip.checkNewFields();
+	}
+	cipPassword.checkObservedElements();
+	kphcObserver.update();
+}
+
+
 // Login dropdown (item 17a). Own code, no jQuery UI. It lives in a CLOSED
 // shadow root: page scripts cannot read the login names, restyle the list or
 // click an item (and a script click is not trusted anyway, see select).
@@ -462,10 +562,7 @@ cipPassword.init = function() {
 		return;
 	}
 	_called.initPasswordGenerator = true;
-
-	window.setInterval(function() {
-		cipPassword.checkObservedElements();
-	}, 400);
+	// Icon positions are kept up to date by kphcObserver (no polling).
 }
 
 cipPassword.initField = function(field, inputs, pos) {
@@ -569,6 +666,8 @@ cipPassword.createIcon = function(field) {
 	cipPassword.observedIcons.push(icon);
 	document.documentElement.appendChild(host);
 	cipPassword.setIconPosition(icon);
+	kphcObserver.watchSize(field);
+	kphcObserver.update();
 }
 
 cipPassword.removeIcon = function(icon) {
@@ -578,6 +677,9 @@ cipPassword.removeIcon = function(icon) {
 	var i = cipPassword.observedIcons.indexOf(icon);
 	if(i >= 0) {
 		cipPassword.observedIcons.splice(i, 1);
+	}
+	if(kphcObserver.ro && icon.field) {
+		kphcObserver.ro.unobserve(icon.field);
 	}
 }
 
@@ -1498,26 +1600,21 @@ cip.submitUrl = null;
 // received credentials from KeePassHTTP
 cip.credentials = [];
 
-// Polls for login fields that appear later. Only started when the first init
-// found no credential fields (else the first tick re-initialised the same
-// fields: double request, double fill). Only one timer at a time.
-cip.detectTimer = null;
+// Watches for login fields that appear later (kphcObserver, no polling). Only
+// started when the first init found no credential fields (else it re-initialised
+// the same fields: double request, double fill).
 cip.detectNewActiveFields = function() {
-	if(cip.detectTimer !== null) {
-		return;
-	}
-	cip.detectTimer = setInterval(function() {
-		if (document.visibilityState !== 'hidden') {
-			const fields = cipFields.getAllFields();
+	kphcObserver.wantDetect = true;
+	kphcObserver.update();
+};
 
-			// If only password field is shown it's enough to have one field visible for initCredentialFields
-			if (fields.length > (_detectedFields == 1 ? 0 : 1)) {
-				clearInterval(cip.detectTimer);
-				cip.detectTimer = null;
-				cip.initCredentialFields(true);
-			}
-		}
-	}, 1000);
+cip.checkNewFields = function() {
+	const fields = cipFields.getAllFields();
+	// If only password field is shown it's enough to have one field visible for initCredentialFields
+	if (fields.length > (_detectedFields == 1 ? 0 : 1)) {
+		kphcObserver.wantDetect = false;
+		cip.initCredentialFields(true);
+	}
 };
 
 // Single entry point for page start. Safe to call more than once.
