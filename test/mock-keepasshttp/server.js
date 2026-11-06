@@ -145,9 +145,24 @@ function handle(r) {
       res.Entries = [encEntry({ title: '', login: '120', password: pw, uuid: '' }, key, iv)];
       return [200, res];
     }
-    case 'set-login':
+    case 'set-login': {
+      // Like the plugin: Uuid given = update that entry, else a new entry. In memory only.
+      const login = decrypt(r.Login, key, r.Nonce);
+      const password = decrypt(r.Password, key, r.Nonce);
+      const url = decrypt(r.Url, key, r.Nonce);
+      logItem.url = url;
+      if (r.Uuid) {
+        const uuid = decrypt(r.Uuid, key, r.Nonce);
+        const e = entries.find((x) => x.uuid === uuid);
+        if (!e) return [200, Object.assign(res, { Error: 'Entry not found' })];
+        e.login = login;
+        e.password = password;
+      } else {
+        entries.push({ title: hostOf(url), url, login, password, uuid: crypto.randomBytes(16).toString('hex') });
+      }
       signResponse(res, r.Id, key);
       return [200, res];
+    }
     default:
       return [400, { Error: 'Unknown command' }];
   }

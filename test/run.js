@@ -69,7 +69,7 @@ async function startFirefox() {
   const opts = new firefox.Options()
     .setBinary(FIREFOX)
     .setPreference('extensions.webextensions.uuids', JSON.stringify({ [EXT_ID]: EXT_UUID }))
-    .setPreference('network.dns.localDomains', 'single.localhost,multi.localhost,bank.localhost,evilbank.localhost')
+    .setPreference('network.dns.localDomains', 'single.localhost,multi.localhost,bank.localhost,evilbank.localhost,utf8.localhost,save.localhost')
     .setPreference('signon.rememberSignons', process.env.FF_PWMGR === '1')
     .setPreference('signon.autofillForms', process.env.FF_PWMGR === '1')
     .setPreference('browser.shell.checkDefaultBrowser', false)
@@ -1165,6 +1165,83 @@ scenarios.clipboard = async function (driver) {
   const messageLater = await (await sr.findElement(By.css('[role=status]'))).getText();
   return { generatedLen: generated.length, copied: afterCopy === generated, message, clearedAfter30s: afterTimeout === '', messageLater,
     pass: generated.length > 0 && afterCopy === generated && /cleared in 30 seconds/.test(message) && afterTimeout === '' };
+};
+
+// Non-English entry in KeePass (dummy data): Greek username and password
+// survive both directions (UTF-8) and fill exactly.
+scenarios.utf8 = async function (driver) {
+  await configure(driver, { autoFillSingleEntry: false });
+  await driver.get(PAGES.replace('{host}', 'utf8') + '/login.html');
+  await sleep(3000);
+  await driver.findElement(By.id('username')).click();
+  await sleep(1200);
+  const d = await dropdownState(driver);
+  await clickDropdownItem(driver, 0);
+  await sleep(1200);
+  const v = await driver.executeScript("return [document.getElementById('username').value, document.getElementById('password').value]");
+  return { items: d.items, username: v[0], passwordMatches: v[1] === 'ασδασδασδασδ',
+    pass: d.items.length === 1 && d.items[0] === 'τραλαλάκος (Single site UTF8)' && v[0] === 'τραλαλάκος' && v[1] === 'ασδασδασδασδ' };
+};
+
+// Saving a login to KeePass (set-login), on its own host so other tests are
+// not touched. First run: a new entry; later runs: update of that entry
+// (no KeePass dialog: "Always allow updating entries" is on in the test KeePass).
+// The form submit and the save prompt are real. The popup's "New"/"Update"
+// button is not clicked: an extension page opened as a tab reads the wrong tab,
+// so the test sends the same message the popup sends (add_/update_credentials).
+scenarios.save = async function (driver) {
+  await configure(driver, { autoFillSingleEntry: false });
+  const page = PAGES_TLS.replace('{host}', 'save') + '/login.html';
+  const user = 'save-user-ä';
+  const round = async () => {
+    const password = 'Δοκιμή-' + Math.random().toString(16).slice(2, 10);
+    await driver.get(page);
+    await sleep(3000);
+    await driver.findElement(By.id('username')).click();
+    await sleep(1000);
+    const before = (await dropdownState(driver)).items;
+    await driver.findElement(By.id('username')).sendKeys(Key.ESCAPE);
+    await driver.executeScript("document.getElementById('username').value = ''");
+    await driver.findElement(By.id('username')).sendKeys(user);
+    // Leaving the username field may fill the stored password (by design):
+    // wait for it, then type over it, as a user would.
+    const pw = await driver.findElement(By.id('password'));
+    await pw.click();
+    await sleep(1200);
+    await pw.clear();
+    await pw.sendKeys(password);
+    const typedOk = await driver.executeScript("return document.getElementById('password').value") === password;
+    await driver.findElement(By.css('button[type=submit]')).click();
+    await sleep(1500);
+    const prompt = await toolbarPopup(driver);
+
+    await openExtPage(driver, 'options/options.html');
+    const found = await extCall(driver, 'retrieve_credentials', ['https://save.localhost:8080', null, true]);
+    const existing = (found.r || []).find((e) => e.Login === user);
+    const mode = existing ? 'update' : 'new';
+    const result = existing
+      ? await extCall(driver, 'update_credentials', [existing.Uuid, user, password, page])
+      : await extCall(driver, 'add_credentials', [user, password, page]);
+    await toWebTab(driver);
+
+    // Read it back through the normal page flow.
+    await driver.get(page);
+    await sleep(3000);
+    await driver.findElement(By.id('username')).click();
+    await sleep(1000);
+    const after = (await dropdownState(driver)).items;
+    const idx = after.findIndex((l) => l.startsWith(user + ' '));
+    if (idx >= 0) await clickDropdownItem(driver, idx);
+    await sleep(1200);
+    const readBack = await driver.executeScript("return document.getElementById('password').value") === password;
+    const ok = typedOk && prompt === 'popup_remember.html' && result.r === 'success' && readBack &&
+      after.filter((l) => l.startsWith(user + ' ')).length === 1;
+    return { mode, prompt, result: result.r, before: before.length, after: after.length, readBack, ok };
+  };
+  // Round 1 creates the entry (first run) or updates it; round 2 always updates.
+  const r1 = await round();
+  const r2 = await round();
+  return { r1, r2, pass: r1.ok && r2.ok && r2.mode === 'update' };
 };
 
 // ---------- main ----------
