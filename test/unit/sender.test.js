@@ -47,7 +47,8 @@ function loadEventGate(ctx, sent) {
   };
 }
 
-const content = (url, frameId = 0) => ({ id: OWN_ID, url, frameId, tab: { id: 3 } });
+// Tab URL = same origin as the frame (iframes here are same-origin; item 8 tests cross-origin).
+const content = (url, frameId = 0) => ({ id: OWN_ID, url, frameId, tab: { id: 3, url } });
 const popup = { id: OWN_ID, url: OWN_BASE + 'popups/popup.html' };
 const plain = (v) => JSON.parse(JSON.stringify(v));
 
@@ -147,4 +148,32 @@ test('unknown action and inherited names are ignored', () => {
   onMessage({ action: 'toString' }, popup);
   onMessage({ action: 'nope' }, popup);
   assert.equal(sent.invoked.length, 0);
+});
+
+// Item 8: cross-origin iframes get no logins and cannot save or show logins.
+const frame = (url, top, frameId = 3) => ({ id: OWN_ID, url, frameId, tab: { id: 3, url: top } });
+
+test('isCrossOriginFrame: top frame, same-origin and cross-origin iframes', () => {
+  const { senderPolicy } = setup();
+  assert.equal(senderPolicy.isCrossOriginFrame(frame('https://a.localhost/x', 'https://evil.localhost/', 0)), false);
+  assert.equal(senderPolicy.isCrossOriginFrame(frame('https://a.localhost/x', 'https://a.localhost/y')), false);
+  assert.equal(senderPolicy.isCrossOriginFrame(frame('https://a.localhost/x', 'https://evil.localhost/')), true);
+  assert.equal(senderPolicy.isCrossOriginFrame(frame('https://a.localhost/x', 'http://a.localhost/')), true);
+  assert.equal(senderPolicy.isCrossOriginFrame(frame('https://a.localhost:444/', 'https://a.localhost/')), true);
+  assert.equal(senderPolicy.isCrossOriginFrame(frame('https://a.localhost/x', undefined)), true);
+});
+
+test('cross-origin iframe: retrieve gets [], popup_login and save are dropped', () => {
+  const { onMessage, sent, page } = setup();
+  const xo = frame('https://bank.localhost/login', 'https://evil.localhost/');
+  const before = sent.invoked.length;
+  const r = onMessage({ action: 'retrieve_credentials', args: [] }, xo);
+  assert.deepEqual(plain(r.replies), [[]]);
+  onMessage({ action: 'popup_login', args: [['x']] }, xo);
+  onMessage({ action: 'set_remember_credentials', args: ['u', 'p'] }, xo);
+  assert.equal(sent.invoked.length, before);
+  assert.equal(page.tabs[3].loginFrameId, undefined);
+  // same-origin iframe still works
+  const so = onMessage({ action: 'retrieve_credentials', args: [] }, frame('https://a.localhost/login', 'https://a.localhost/'));
+  assert.equal(so.last.args[0], 'https://a.localhost');
 });

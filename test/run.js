@@ -623,8 +623,10 @@ const scenarios = {
     const inner = await driver.executeScript("return document.getElementById('username').value.length + document.getElementById('password').value.length");
     await driver.switchTo().defaultContent();
     const filledFrames = (top > 0 ? 1 : 0) + (inner > 0 ? 1 : 0);
-    return { popup: res, topFilledChars: top, iframeFilledChars: inner, filledFrames,
-      pass: typeof res.loginFrameId === 'number' && filledFrames === 1 &&
+    // The same-origin iframe must have logins too (dropdown), or the check above proves nothing.
+    const innerState = await frameState(driver);
+    return { popup: res, topFilledChars: top, iframeFilledChars: inner, filledFrames, iframeDropdownItems: innerState.dropdownItems,
+      pass: typeof res.loginFrameId === 'number' && filledFrames === 1 && (inner > 0 || innerState.dropdownItems === 2) &&
         ((res.loginFrameId === 0) === (top > 0)) };
   },
 
@@ -665,7 +667,49 @@ const scenarios = {
       pass: u && p && !!own && own.username === 'username' && own.password === 'password' &&
         !!saved['https://other.localhost:8080'] };
   },
+
+  // Item 8: a cross-origin iframe (bank.localhost inside single.localhost)
+  // gets no logins: no request for its URL, no auto-fill, no dropdown.
+  async iframe(driver) {
+    await configure(driver, { autoFillSingleEntry: true });
+    await kphReset();
+    await driver.get(PAGES_TLS.replace('{host}', 'single') + '/iframe.html');
+    await sleep(4000);
+    const stats = await kphStats();
+    const inFrame = await frameState(driver);
+    const bankRequests = (stats?.log || []).filter((l) => l.type === 'get-logins' && String(l.url).includes('bank')).length;
+    return { bankRequests, iframe: inFrame, requestTimeline: timeline(stats),
+      pass: bankRequests === 0 && inFrame.filledChars === 0 && inFrame.dropdownItems === 0 };
+  },
+
+  // Item 8: a sandboxed iframe (opaque origin) from the same host gets nothing.
+  async sandbox(driver) {
+    await configure(driver, { autoFillSingleEntry: true });
+    await kphReset();
+    await driver.get(PAGES_TLS.replace('{host}', 'single') + '/sandbox.html');
+    await sleep(4000);
+    const stats = await kphStats();
+    const inFrame = await frameState(driver);
+    const getLogins = stats?.byType['get-logins'] ?? 0;
+    return { getLogins, iframe: inFrame, requestTimeline: timeline(stats),
+      pass: getLogins === 0 && inFrame.filledChars === 0 && inFrame.dropdownItems === 0 };
+  },
 };
+
+// Values and dropdown inside #frame, after focusing its username field.
+async function frameState(driver) {
+  await driver.switchTo().frame(await driver.findElement(By.id('frame')));
+  try {
+    const filledChars = await driver.executeScript("return document.getElementById('username').value.length + document.getElementById('password').value.length");
+    await driver.executeScript("document.getElementById('username').focus()");
+    await sleep(1200);
+    const dropdownItems = await driver.executeScript("return document.querySelectorAll('ul.ui-autocomplete li.ui-menu-item').length");
+    const origin = await driver.executeScript('return window.origin');
+    return { filledChars, dropdownItems, origin };
+  } finally {
+    await driver.switchTo().defaultContent();
+  }
+}
 
 // Opens an extension page in a new tab without selecting it.
 async function openTabBehind(driver, rel) {

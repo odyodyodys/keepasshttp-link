@@ -50,6 +50,25 @@ senderPolicy.isAllowed = function(kind, action) {
 	return false;
 }
 
+// True if the message comes from an iframe whose origin differs from the
+// top page of the tab (ads, widgets, a hostile page framing a login).
+// Both URLs come from Firefox. Unknown values count as cross-origin.
+senderPolicy.isCrossOriginFrame = function(sender) {
+	if(sender.frameId === 0) {
+		return false;
+	}
+	var frame = senderPolicy.frameOrigin(sender.url);
+	var top = senderPolicy.frameOrigin(sender.tab && sender.tab.url);
+	return !frame || !top || frame !== top;
+}
+
+// Actions refused to cross-origin iframes: no logins in, no logins out.
+senderPolicy.topOriginOnlyActions = {
+	"popup_login": true,
+	"retrieve_credentials": true,
+	"set_remember_credentials": true
+};
+
 // Parsed http(s) URL of the sending frame, or null.
 senderPolicy.webUrl = function(url) {
 	try {

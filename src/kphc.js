@@ -1,6 +1,10 @@
 
 var cIPJQ = jQuery.noConflict(true);
 
+// Sandboxed frame or document (opaque origin "null"): do nothing at all.
+// The background cannot see the sandbox flag, so this check is here.
+var kphcSandboxed = (window.origin === "null");
+
 // contains already called method names
 var _called = {};
 
@@ -8,6 +12,9 @@ var _called = {};
 var _detectedFields = 0;
 
 browser.runtime.onMessage.addListener(function(req, sender, callback) {
+	if (kphcSandboxed) {
+		return;
+	}
 	if ('action' in req) {
 		if(req.action == "fill_user_pass_with_specific_login") {
 			if(cip.credentials[req.id]) {
@@ -1780,7 +1787,9 @@ cip.rememberCredentials = function(usernameValue, passwordValue) {
 };
 
 cIPJQ(function() {
-	cip.start();
+	if (!kphcSandboxed) {
+		cip.start();
+	}
 });
 
 var cipEvents = {};

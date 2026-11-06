@@ -46,6 +46,15 @@ cipevent.onContentMessage = function(request, sender, callback) {
 		tabInfo.knownLogins = {};
 	}
 
+	if(senderPolicy.topOriginOnlyActions[request.action] && senderPolicy.isCrossOriginFrame(sender)) {
+		console.log("KeePassHttp-Connector: '" + request.action + "' refused for a cross-origin iframe");
+		if(request.action === "retrieve_credentials") {
+			callback([]);
+			return true;
+		}
+		return;
+	}
+
 	switch(request.action) {
 		case "retrieve_credentials":
 			if(!origin) {
