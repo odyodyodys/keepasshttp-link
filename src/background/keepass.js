@@ -40,7 +40,7 @@ keepass.updateCredentials = function(callback, tab, entryId, username, password,
 	page.tabs[tab.id].errorMessage = null;
 
 	// is browser associated to keepass?
-	keepass.testAssociation(tab).then((configured) => {
+	keepass.testAssociation(tab).then(async (configured) => {
 		if(!configured) {
 			browserAction.showDefault(null, tab);
 			callback("error");
@@ -51,7 +51,7 @@ keepass.updateCredentials = function(callback, tab, entryId, username, password,
 		var request = {
 			RequestType: "set-login"
 		};
-		var verifier = keepass.setVerifier(request);
+		var verifier = await keepass.setVerifier(request);
 		var id = verifier[0];
 		var key = verifier[1];
 		var iv = request.Nonce;
@@ -67,7 +67,7 @@ keepass.updateCredentials = function(callback, tab, entryId, username, password,
 		}
 
 		// send request
-		keepass.sendAsync(request).then((result) => {
+		keepass.sendAsync(request).then(async (result) => {
 			var status = result[0];
 			var response = result[1];
 
@@ -75,7 +75,7 @@ keepass.updateCredentials = function(callback, tab, entryId, username, password,
 			var code = "error";
 			if(keepass.checkStatus(status, tab)) {
 				var r = JSON.parse(response);
-				if (keepass.verifyResponse(r, key, id)) {
+				if (await keepass.verifyResponse(r, key, id)) {
 					code = "success";
 				}
 				else {
@@ -95,7 +95,7 @@ keepass.retrieveCredentials = function (callback, tab, url, submiturl, forceCall
 	page.tabs[tab.id].errorMessage = null;
 
 	// is browser associated to keepass?
-	keepass.testAssociation(tab, triggerUnlock).then((configured) => {
+	keepass.testAssociation(tab, triggerUnlock).then(async (configured) => {
 		if(!configured) {
 			browserAction.showDefault(null, tab);
 			if(forceCallback) {
@@ -110,7 +110,7 @@ keepass.retrieveCredentials = function (callback, tab, url, submiturl, forceCall
 			"SortSelection": "true",
 			"TriggerUnlock": (triggerUnlock === true) ? "true" : "false"
 		};
-		var verifier = keepass.setVerifier(request);
+		var verifier = await keepass.setVerifier(request);
 		var id = verifier[0];
 		var key = verifier[1];
 		var iv = request.Nonce;
@@ -121,7 +121,7 @@ keepass.retrieveCredentials = function (callback, tab, url, submiturl, forceCall
 		}
 
 		// send request
-		keepass.sendAsync(request).then((result) => {
+		keepass.sendAsync(request).then(async (result) => {
 			var status = result[0];
 			var response = result[1];
 			var entries = [];
@@ -132,7 +132,7 @@ keepass.retrieveCredentials = function (callback, tab, url, submiturl, forceCall
 
 				keepass.setCurrentKeePassHttpVersion(r.Version);
 
-				if (keepass.verifyResponse(r, key, id)) {
+				if (await keepass.verifyResponse(r, key, id)) {
 					var rIv = r.Nonce;
 					for (var i = 0; i < r.Entries.length; i++) {
 						keepass.decryptEntry(r.Entries[i], key, rIv);
@@ -160,7 +160,7 @@ keepass.retrieveCredentials = function (callback, tab, url, submiturl, forceCall
 
 keepass.generatePassword = function (callback, tab, forceCallback) {
 	// is browser associated to keepass?
-	keepass.testAssociation(tab).then((configured) => {
+	keepass.testAssociation(tab).then(async (configured) => {
 		if(!configured) {
 			browserAction.showDefault(null, tab);
 			if(forceCallback) {
@@ -178,12 +178,12 @@ keepass.generatePassword = function (callback, tab, forceCallback) {
 		var request = {
 			RequestType: "generate-password"
 		};
-		var verifier = keepass.setVerifier(request);
+		var verifier = await keepass.setVerifier(request);
 		var id = verifier[0];
 		var key = verifier[1];
 
 		// send request
-		keepass.sendAsync(request).then((result) => {
+		keepass.sendAsync(request).then(async (result) => {
 			var status = result[0];
 			var response = result[1];
 			var passwords = [];
@@ -194,9 +194,9 @@ keepass.generatePassword = function (callback, tab, forceCallback) {
 
 				keepass.setCurrentKeePassHttpVersion(r.Version);
 
-				if (keepass.verifyResponse(r, key, id)) {
+				if (await keepass.verifyResponse(r, key, id)) {
 					var rIv = r.Nonce;
-	
+
 					if(r.Entries) {
 						for (var i = 0; i < r.Entries.length; i++) {
 							keepass.decryptEntry(r.Entries[i], key, rIv);
@@ -226,7 +226,7 @@ keepass.associate = function(callback, tab) {
 		return;
 	}
 
-	keepass.getDatabaseHash(tab).then(() => {
+	keepass.getDatabaseHash(tab).then(async () => {
 		if(keepass.isDatabaseClosed || !keepass.isKeePassHttpAvailable) {
 			return;
 		}
@@ -241,9 +241,9 @@ keepass.associate = function(callback, tab) {
 			Key: key
 		};
 
-		keepass.setVerifier(request, key);
+		await keepass.setVerifier(request, key);
 
-		keepass.sendAsync(request).then((result) => {
+		keepass.sendAsync(request).then(async (result) => {
 			if(keepass.checkStatus(result[0], tab)) {
 				var r = JSON.parse(result[1]);
 
@@ -255,8 +255,8 @@ keepass.associate = function(callback, tab) {
 				}
 
 				var id = r.Id;
-				if(!keepass.verifyResponse(r, key)) {
-					page.tabs[tab.id].errorMessage = "KeePass association failed, try again.";
+				if(!(await keepass.verifyResponse(r, key))) {
+					page.tabs[tab.id].errorMessage = r.integrityFailed ? keepass.integrityErrorMessage : "KeePass association failed, try again.";
 				}
 				else {
 					keepass.setCryptoKey(id, key);
@@ -380,6 +380,8 @@ keepass.migrateKeyRing = () => {
 // Removing them forces a new association with a key from the CSPRNG.
 keepass.keyGeneration = 2;
 
+keepass.integrityErrorMessage = "KeePassHttp response failed the integrity check (HMAC). KeePassHttp 2.3.0 or newer is required.";
+
 keepass.dropWeakKeys = function(keyring) {
 	var removed = 0;
 	if (!keyring || typeof keyring !== "object") {
@@ -500,7 +502,7 @@ keepass.checkForNewKeePassHttpVersion = function() {
 
 keepass.testAssociation = function (tab, triggerUnlock) {
 	return new Promise((resolve, reject) => {
-		keepass.getDatabaseHash(tab, triggerUnlock).then(() => {
+		keepass.getDatabaseHash(tab, triggerUnlock).then(async () => {
 			if(keepass.isDatabaseClosed || !keepass.isKeePassHttpAvailable) {
 				resolve(false);
 				return;
@@ -515,7 +517,7 @@ keepass.testAssociation = function (tab, triggerUnlock) {
 				"RequestType": "test-associate",
 				"TriggerUnlock": (triggerUnlock === true) ? "true" : false
 			};
-			var verifier = keepass.setVerifier(request);
+			var verifier = await keepass.setVerifier(request);
 
 			if(!verifier) {
 				keepass.associated.value = false;
@@ -524,10 +526,10 @@ keepass.testAssociation = function (tab, triggerUnlock) {
 				return;
 			}
 
-			keepass.sendAsync(request).then((result) => {
+			keepass.sendAsync(request).then(async (result) => {
 				var status = result[0];
 				var response = result[1];
-	
+
 				if(keepass.checkStatus(status, tab)) {
 					var r = JSON.parse(response);
 					var id = verifier[0];
@@ -541,7 +543,13 @@ keepass.testAssociation = function (tab, triggerUnlock) {
 					}
 
 				keepass.isEncryptionKeyUnrecognized = false;
-					if(!keepass.verifyResponse(r, key, id)) {
+					var verified = await keepass.verifyResponse(r, key, id);
+					if(!verified && r.integrityFailed) {
+						// Do not delete the key: a tampered response must not force a new
+						// association (associate sends the key in clear).
+						page.tabs[tab.id].errorMessage = keepass.integrityErrorMessage;
+					}
+					else if(!verified) {
 						var hash = r.Hash || 0;
 						keepass.deleteKey(hash);
 						keepass.isEncryptionKeyUnrecognized = true;
@@ -594,7 +602,8 @@ keepass.getDatabaseHash = function (tab, triggerUnlock) {
 	});
 }
 
-keepass.setVerifier = function(request, inputKey) {
+// Async: sets Id, Nonce, Verifier and Hmac on the request. Resolves to [id, key] or null.
+keepass.setVerifier = async function(request, inputKey) {
 	var key = inputKey || null;
 	var id = null;
 
@@ -614,15 +623,64 @@ keepass.setVerifier = function(request, inputKey) {
 	var iv = cryptoHelpers.randomBytes(keepass.ivBytes);
 	request.Nonce = keepass.b64e(iv);
 
-	//var decodedKey = keepass.b64d(key);
 	request.Verifier = keepass.encrypt(request.Nonce, key, request.Nonce);
+	request.Hmac = await keepass.computeHmac(key, request.Nonce, request.Verifier);
 
 	return [id, key];
 }
 
-keepass.verifyResponse = function(response, key, id) {
+// HMAC-SHA256(AES key, IV bytes || Verifier ciphertext bytes), Base64.
+// Same as KeePassHttp 2.3.x (Protocol.cs ComputeHmac). Uses WebCrypto.
+// Note: the plugin's HMAC covers only Nonce and Verifier, not the other fields.
+keepass.hmacKey = function(keyB64, usage) {
+	return crypto.subtle.importKey("raw", new Uint8Array(keepass.b64d(keyB64)),
+		{name: "HMAC", hash: "SHA-256"}, false, [usage]);
+}
+
+keepass.hmacData = function(ivB64, cipherB64) {
+	return new Uint8Array(keepass.b64d(ivB64).concat(keepass.b64d(cipherB64)));
+}
+
+keepass.computeHmac = async function(keyB64, ivB64, cipherB64) {
+	var hmacKey = await keepass.hmacKey(keyB64, "sign");
+	var sig = await crypto.subtle.sign("HMAC", hmacKey, keepass.hmacData(ivB64, cipherB64));
+	return keepass.b64e(Array.from(new Uint8Array(sig)));
+}
+
+// True only if the response has a well-formed Nonce, Verifier and Hmac and the
+// Hmac is valid. crypto.subtle.verify compares in constant time.
+keepass.checkResponseHmac = async function(response, keyB64) {
+	try {
+		if(typeof response.Nonce !== "string" || typeof response.Verifier !== "string" || typeof response.Hmac !== "string") {
+			return false;
+		}
+		var sig = keepass.b64d(response.Hmac);
+		if(sig.length !== 32 || keepass.b64d(response.Nonce).length !== keepass.ivBytes) {
+			return false;
+		}
+		var hmacKey = await keepass.hmacKey(keyB64, "verify");
+		return await crypto.subtle.verify("HMAC", hmacKey, new Uint8Array(sig),
+			keepass.hmacData(response.Nonce, response.Verifier));
+	}
+	catch (e) {
+		// e.g. invalid Base64
+		return false;
+	}
+}
+
+// Async: checks the Hmac first (required, KeePassHttp 2.3.0+), then the Verifier.
+// If the Hmac check fails, sets response.integrityFailed = true.
+keepass.verifyResponse = async function(response, key, id) {
 	keepass.associated.value = response.Success;
 	if (!response.Success) {
+		keepass.associated.hash = null;
+		return false;
+	}
+
+	if (!(await keepass.checkResponseHmac(response, key))) {
+		response.integrityFailed = true;
+		console.log("KeePassHttp response rejected: Hmac missing or invalid");
+		keepass.associated.value = false;
 		keepass.associated.hash = null;
 		return false;
 	}
@@ -630,9 +688,15 @@ keepass.verifyResponse = function(response, key, id) {
 	keepass.associated.hash = keepass.databaseHash;
 
 	var iv = response.Nonce;
-	var value = keepass.decrypt(response.Verifier, key, iv, true);
+	var value = null;
+	try {
+		value = keepass.decrypt(response.Verifier, key, iv, true);
+	}
+	catch (e) {
+		value = null;
+	}
 
-	keepass.associated.value = (value == iv);
+	keepass.associated.value = (value !== null && value == iv);
 
 	if(id) {
 		keepass.associated.value = (keepass.associated.value && id == response.Id);

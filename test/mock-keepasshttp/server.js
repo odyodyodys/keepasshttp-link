@@ -6,6 +6,7 @@
 // Listens on 127.0.0.1 only. Extra test-only endpoints:
 //   GET  /__stats  -> request counters + request log (no secrets)
 //   POST /__reset  -> clear counters and log (keeps associations)
+//   POST /__mode   -> {"tamper": mode} response tampering (see tamper.js)
 //
 // Env: MOCK_PORT (default 19475), MOCK_LOOSE_MATCH=1 to copy the real
 // server's loose host matching (EndsWith/Contains, no dot boundary).
@@ -15,6 +16,7 @@ import crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { tamper, parseMode } from './tamper.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.MOCK_PORT || 19475);
@@ -25,6 +27,7 @@ const DB_HASH = crypto.createHash('sha1').update('mock-test-database').digest('h
 const entries = JSON.parse(readFileSync(path.join(here, 'entries.json'), 'utf8'));
 const keys = new Map(); // Id -> base64 AES key
 let stats = { total: 0, byType: {}, log: [] };
+let tamperMode = 'none';
 
 const b64 = (buf) => Buffer.from(buf).toString('base64');
 const unb64 = (s) => Buffer.from(s, 'base64');
@@ -44,9 +47,16 @@ function hmac(keyB64, ivB64, cipherB64) {
     .update(Buffer.concat([unb64(ivB64), unb64(cipherB64)])).digest());
 }
 
+// Like the plugin (Protocol.cs): Hmac is optional, but if present it must match
+// (checked first, constant time), then the Verifier must decrypt to the Nonce.
 function verifyRequest(r, keyB64) {
   try {
     if (!r.Nonce || !r.Verifier || !keyB64) return false;
+    if (r.Hmac) {
+      const want = unb64(hmac(keyB64, r.Nonce, r.Verifier));
+      const got = unb64(r.Hmac);
+      if (got.length !== want.length || !crypto.timingSafeEqual(got, want)) return false;
+    }
     return decrypt(r.Verifier, keyB64, r.Nonce) === r.Nonce;
   } catch {
     return false;
@@ -93,7 +103,7 @@ function encEntry(e, keyB64, iv) {
 function handle(r) {
   const type = r.RequestType;
   const res = baseResponse(type);
-  const logItem = { t: Date.now(), type, verified: false };
+  const logItem = { t: Date.now(), type, verified: false, hmac: typeof r.Hmac === 'string' && r.Hmac.length > 0 };
   stats.total++;
   stats.byType[type] = (stats.byType[type] || 0) + 1;
   stats.log.push(logItem);
@@ -154,6 +164,14 @@ const server = http.createServer((req, resp) => {
     return send(200, { ok: true });
   }
   if (req.method !== 'POST') return send(405, { Error: 'POST only' });
+  if (req.url === '/__mode') {
+    let b = '';
+    req.on('data', (c) => { b += c; });
+    req.on('end', () => {
+      try { tamperMode = parseMode(b); send(200, { tamper: tamperMode }); } catch (e) { send(400, { Error: e.message }); }
+    });
+    return;
+  }
 
   let body = '';
   req.on('data', (c) => {
@@ -164,7 +182,7 @@ const server = http.createServer((req, resp) => {
     let r;
     try { r = JSON.parse(body); } catch { return send(400, { Error: 'Bad JSON' }); }
     const [code, out] = handle(r);
-    send(code, out);
+    send(code, tamper(tamperMode, out));
   });
 });
 

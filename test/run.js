@@ -55,6 +55,11 @@ async function kphStats() {
 async function kphReset() {
   await fetch(`http://127.0.0.1:${EXT_PORT}/__reset`, { method: 'POST' });
 }
+// Item 3: make the fake server / proxy tamper with successful responses.
+async function setTamper(mode) {
+  const r = await fetch(`http://127.0.0.1:${EXT_PORT}/__mode`, { method: 'POST', body: JSON.stringify({ tamper: mode }) });
+  if (!r.ok) throw new Error('setTamper ' + mode + ': HTTP ' + r.status);
+}
 
 // ---------- Firefox ----------
 async function startFirefox() {
@@ -329,6 +334,51 @@ const scenarios = {
       validKeyAcceptedAgain: !!(back.r && back.r.associated),
       pass: !(st.r && st.r.associated) && Object.keys(after).length === 0 && !!(back.r && back.r.associated),
     };
+  },
+
+  // Item 3: every verified request carries Hmac; a successful response with a
+  // missing or wrong Hmac is rejected (no fill), the key is kept, and normal
+  // traffic works again afterwards. Tampering is done by the fake server or proxy.
+  async hmac(driver) {
+    const loadAndRead = async () => {
+      await driver.get(PAGES.replace('{host}', 'single') + '/login.html');
+      await sleep(3000);
+      return pageState(driver);
+    };
+    await configure(driver, { autoFillSingleEntry: true });
+    await setTamper('none');
+    await kphReset();
+    const base = await loadAndRead();
+    const baseStats = await kphStats();
+    const verifiedWithoutHmac = baseStats.log.filter((l) => l.verified && !l.hmac).length;
+    const out = { baseline: { passwordLen: base.passwordLen, verifiedRequests: baseStats.log.filter((l) => l.verified).length, verifiedWithoutHmac } };
+    let ok = base.passwordLen > 0 && verifiedWithoutHmac === 0 && out.baseline.verifiedRequests > 0;
+    for (const mode of ['hmac-missing', 'hmac-bad', 'nonce-swap']) {
+      await setTamper(mode);
+      const s1 = await loadAndRead(); // cached association -> get-logins response tampered
+      const s2 = await loadAndRead(); // test-associate response tampered
+      await openExtPage(driver, 'options/options.html');
+      const st = await extCall(driver, 'get_status');
+      const ring = await readKeyRing(driver);
+      await toWebTab(driver);
+      const r = {
+        filled: [s1.passwordLen, s2.passwordLen],
+        associated: !!(st.r && st.r.associated),
+        error: st.r && st.r.error,
+        keysKept: Object.keys(ring).length,
+      };
+      r.pass = s1.passwordLen === 0 && s2.passwordLen === 0 && !r.associated &&
+        /integrity check \(HMAC\)/.test(r.error || '') && r.keysKept === 1;
+      ok = ok && r.pass;
+      out[mode] = r;
+    }
+    await setTamper('none');
+    const after = await loadAndRead();
+    out.afterRestore = { passwordLen: after.passwordLen };
+    ok = ok && after.passwordLen > 0;
+    await configure(driver, { autoFillSingleEntry: false });
+    out.pass = ok;
+    return out;
   },
 
   // Form appears after 2.5 s.
