@@ -1242,6 +1242,28 @@ scenarios.save = async function (driver) {
   return { r1, r2, pass: r1.ok && r2.ok && r2.mode === 'update' };
 };
 
+// Toolbar button state per tab: with logins the popup is the login list and
+// the icon shows "choose"; when KeePass is locked the icon shows "off".
+// Icons are compared with each other, not with file names.
+async function toolbarIcon(driver) {
+  return inChrome(driver, (ext, tab, EP) =>
+    JSON.stringify(EP.apiManager.global.browserActionFor(ext).action.getProperty(tab, 'icon') || null));
+}
+scenarios.toolbar = async function (driver) {
+  await configure(driver, { autoFillSingleEntry: false });
+  await setTamper('none');
+  await openPage(driver, PAGES_TLS.replace('{host}', 'multi') + '/login.html');
+  const withLogins = { popup: await toolbarPopup(driver), icon: await toolbarIcon(driver) };
+  await setTamper('locked');
+  await openPage(driver, PAGES_TLS.replace('{host}', 'multi') + '/login.html');
+  await sleep(1500);
+  const locked = { popup: await toolbarPopup(driver), icon: await toolbarIcon(driver) };
+  await setTamper('none');
+  const iconsDiffer = withLogins.icon !== locked.icon;
+  return { withLogins: withLogins.popup, locked: locked.popup, iconsDiffer,
+    pass: withLogins.popup === 'popup_login.html' && locked.popup === 'popup.html' && iconsDiffer };
+};
+
 // ---------- main ----------
 if (process.argv.includes('--list')) { console.log(Object.keys(scenarios).join(' ')); process.exit(0); }
 const wanted = process.argv.slice(2).filter((a) => scenarios[a]);

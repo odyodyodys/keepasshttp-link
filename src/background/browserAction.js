@@ -282,7 +282,6 @@ browserAction.generateIconName = function(iconType, icon) {
 	}
 
 	var name = "icon_";
-	name += (keepass.keePassHttpUpdateAvailable()) ? "new_" : "";
 	name += (!iconType || iconType == "normal") ? "normal_" : iconType + "_";
 	name += keepass.getIconColor();
 	name += "_19x19.png";
