@@ -56,8 +56,11 @@ test('manifest: no deprecated key, no data collection, minimal permissions', () 
     'webRequest',          // HTTP Basic Auth (onAuthRequired)
     'webRequestBlocking',
   ]);
-  for (const f of m.web_accessible_resources) {
-    if (f.includes('*')) continue;
-    assert.ok(statSync(path.join(SRC, f)).isFile(), 'web_accessible_resources lists a missing file: ' + f);
-  }
+  // Item 17: no file is page-accessible (the page UI is in closed shadow roots,
+  // icons are inline SVG), so pages cannot load extension files or learn its URL.
+  assert.equal(m.web_accessible_resources, undefined);
+  // Content script: no jQuery UI, no injected CSS.
+  const cs = m.content_scripts[0];
+  assert.ok(!cs.js.some((f) => /jquery-ui/.test(f)), JSON.stringify(cs.js));
+  assert.equal(cs.css, undefined);
 });

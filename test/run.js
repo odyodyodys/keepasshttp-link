@@ -670,14 +670,26 @@ const scenarios = {
     });
     await toWebTab(driver);
     await sleep(800);
-    const clickOverlay = (n) => driver.executeScript(
-      `const f = document.querySelectorAll('#b2c-cipDefine-fields .b2c-fixed-field:not(.b2c-fixed-username-field):not(.b2c-fixed-password-field)'); if (f[${n}]) { f[${n}].click(); return true; } return false;`);
+    // Item 17c: the chooser is in a closed shadow root; real clicks through WebDriver.
+    const chooser = async () => (await driver.findElement(By.css('kphc-chooser'))).getShadowRoot();
+    const pageSeesChooser = await driver.executeScript("const h = document.querySelector('kphc-chooser'); return h ? h.shadowRoot !== null : null");
+    // A page script clicking the chooser host does nothing.
+    await driver.executeScript("document.querySelector('kphc-chooser').click()");
+    const clickOverlay = async (n) => {
+      const marks = await (await chooser()).findElements(By.css('[data-kphc-field]:not([data-kphc-chosen])'));
+      if (!marks[n]) return false;
+      await marks[n].click();
+      return true;
+    };
     const u = await clickOverlay(0);
     await sleep(300);
     const p = await clickOverlay(0);
     await sleep(300);
-    await driver.executeScript("document.getElementById('b2c-btn-confirm').click()");
+    for (const b of await (await chooser()).findElements(By.css('button'))) {
+      if ((await b.getText()) === 'Confirm') { await b.click(); break; }
+    }
     await sleep(1000);
+    const chooserClosed = (await driver.findElements(By.css('kphc-chooser'))).length === 0;
     const readStored = async () => {
       await openExtPage(driver, 'options/options.html');
       const v = await driver.executeAsyncScript(function (done) {
@@ -689,8 +701,8 @@ const scenarios = {
     const saved = await readStored();
     const own = saved['https://single.localhost:8080'];
     await configure(driver, { 'defined-credential-fields': {} });
-    return { overlaysClicked: [u, p], savedOrigins: Object.keys(saved), own,
-      pass: u && p && !!own && own.username === 'username' && own.password === 'password' &&
+    return { overlaysClicked: [u, p], pageSeesChooser, chooserClosed, savedOrigins: Object.keys(saved), own,
+      pass: u && p && pageSeesChooser === false && chooserClosed && !!own && own.username === 'username' && own.password === 'password' &&
         !!saved['https://other.localhost:8080'] };
   },
 

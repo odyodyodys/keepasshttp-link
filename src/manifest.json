@@ -59,13 +59,7 @@
 			"js": [
 				"browser-polyfill.min.js",
 				"jquery-3.2.1.min.js",
-				"jquery-ui.min.js",
 				"kphc.js"
-			],
-			"css": [
-				"jquery-ui.min.css",
-				"bootstrap-btn.css",
-				"kphc.css"
 			],
 			"run_at": "document_idle",
 			"all_frames": true
@@ -87,9 +81,6 @@
 			}
 		}
 	},
-	"web_accessible_resources": [
-		"images/*"
-	],
 	"permissions": [
 		"contextMenus",
 		"clipboardWrite",

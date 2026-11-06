@@ -821,6 +821,9 @@ cipForm.onSubmit = function() {
 
 
 
+// "Choose own credential fields" (item 17c). Own code in a CLOSED shadow root,
+// no jQuery UI: the page cannot read or click the chooser. Only real user
+// clicks act. Styles via CSSOM (kphcStyle), so a page CSP does not block them.
 var cipDefine = {};
 
 cipDefine.selection = {
@@ -828,132 +831,164 @@ cipDefine.selection = {
 	"password": null,
 	"fields": {}
 };
-cipDefine.eventFieldClick = null;
+cipDefine.ui = null;
+cipDefine.step = 1;
 
 cipDefine.init = function () {
-	var $backdrop = cIPJQ("<div>").attr("id", "b2c-backdrop").addClass("b2c-modal-backdrop");
-	cIPJQ("body").append($backdrop);
-
-	var $chooser = cIPJQ("<div>").attr("id", "b2c-cipDefine-fields");
-	cIPJQ("body").append($chooser);
-
-	var $description = cIPJQ("<div>").attr("id", "b2c-cipDefine-description");
-	$backdrop.append($description);
+	cipDefine.close();
 
 	cipFields.getAllFields();
 	cipFields.prepareVisibleFieldsWithID("select");
 
-	cipDefine.initDescription();
+	var ui = {};
+	ui.host = document.createElement("kphc-chooser");
+	kphcStyle(ui.host, { "all": "initial", "position": "absolute", "left": "0px", "top": "0px",
+		"width": "0px", "height": "0px", "overflow": "visible", "z-index": "2147483645", "display": "block" });
+	var root = ui.host.attachShadow({ mode: "closed" });
+
+	ui.backdrop = document.createElement("div");
+	kphcStyle(ui.backdrop, { "position": "fixed", "left": "0", "top": "0", "right": "0", "bottom": "0",
+		"background": "rgba(0,0,0,0.75)", "z-index": "2147483645" });
+	ui.fields = document.createElement("div");
+	kphcStyle(ui.fields, { "position": "absolute", "left": "0px", "top": "0px", "z-index": "2147483646" });
+
+	ui.box = document.createElement("div");
+	ui.box.setAttribute("role", "dialog");
+	ui.box.setAttribute("aria-label", "Choose own credential fields");
+	kphcStyle(ui.box, { "position": "fixed", "left": "150px", "top": "100px", "z-index": "2147483647",
+		"max-width": "420px", "padding": "8px 10px", "border": "2px solid #555555", "background": "rgba(40,40,40,0.92)",
+		"color": "#efefef", "font": "14px Verdana, Arial, sans-serif", "text-align": "left" });
+	ui.headline = document.createElement("div");
+	kphcStyle(ui.headline, { "font-weight": "bold", "font-size": "160%", "padding-bottom": "8px", "cursor": "move" });
+	ui.help = document.createElement("div");
+	kphcStyle(ui.help, { "margin-bottom": "5px" });
+
+	var btn = function(text, color) {
+		var b = document.createElement("button");
+		b.type = "button";
+		b.textContent = text;
+		kphcStyle(b, { "font": "13px Verdana, Arial, sans-serif", "padding": "3px 10px", "margin": "0 5px 0 0",
+			"border": "1px solid #333333", "border-radius": "3px", "cursor": "pointer", "background": color, "color": "#ffffff" });
+		return b;
+	};
+	ui.btnConfirm = btn("Confirm", "#2a6fd6");
+	ui.btnSkip = btn("Skip", "#3a87ad");
+	ui.btnAgain = btn("Again", "#c67605");
+	ui.btnDismiss = btn("Dismiss", "#b00020");
+	var buttons = document.createElement("div");
+	buttons.appendChild(ui.btnConfirm);
+	buttons.appendChild(ui.btnSkip);
+	buttons.appendChild(ui.btnAgain);
+	buttons.appendChild(ui.btnDismiss);
+
+	ui.box.appendChild(ui.headline);
+	ui.box.appendChild(ui.help);
+	ui.box.appendChild(buttons);
+
+	var origin = document.location.origin;
+	if(cip.settings["defined-credential-fields"] && cip.settings["defined-credential-fields"][origin]) {
+		var p = document.createElement("p");
+		kphcStyle(p, { "margin": "10px 0 0 0", "padding-top": "10px", "border-top": "2px solid #666666" });
+		p.appendChild(document.createTextNode("For this page credential fields are already selected and will be overwritten."));
+		p.appendChild(document.createElement("br"));
+		var discard = btn("Discard selection", "#b00020");
+		kphcStyle(discard, { "margin-top": "5px" });
+		p.appendChild(discard);
+		ui.box.appendChild(p);
+		cipDefine.onTrustedClick(discard, function() {
+			delete cip.settings["defined-credential-fields"][origin];
+			browser.runtime.sendMessage({
+				action: 'save_defined_credential_fields',
+				args: [null]
+			});
+			p.parentNode.removeChild(p);
+		});
+	}
+
+	cipDefine.onTrustedClick(ui.btnDismiss, cipDefine.close);
+	cipDefine.onTrustedClick(ui.btnSkip, function() {
+		if(cipDefine.step == 1) {
+			cipDefine.selection.username = null;
+			cipDefine.prepareStep2();
+		}
+		else if(cipDefine.step == 2) {
+			cipDefine.selection.password = null;
+			cipDefine.prepareStep3();
+		}
+	});
+	cipDefine.onTrustedClick(ui.btnAgain, function() {
+		cipDefine.resetSelection();
+		cipDefine.prepareStep1();
+	});
+	cipDefine.onTrustedClick(ui.btnConfirm, cipDefine.confirm);
+	cipDefine.makeDraggable(ui.box, ui.headline);
+
+	root.appendChild(ui.backdrop);
+	root.appendChild(ui.fields);
+	root.appendChild(ui.box);
+	document.documentElement.appendChild(ui.host);
+	cipDefine.ui = ui;
 
 	cipDefine.resetSelection();
 	cipDefine.prepareStep1();
-	cipDefine.markAllUsernameFields($chooser);
 }
 
-cipDefine.initDescription = function() {
-	var $description = cIPJQ("div#b2c-cipDefine-description");
-	var $h1 = cIPJQ("<div>").addClass("b2c-chooser-headline");
-	$description.append($h1);
-	var $help = cIPJQ("<div>").addClass("b2c-chooser-help").attr("id", "b2c-help");
-	$description.append($help);
+cipDefine.onTrustedClick = function(el, fn) {
+	el.addEventListener("click", function(e) {
+		e.preventDefault();
+		if(kphcIsTrusted(e) && !el.disabled) {
+			fn.call(el, e);
+		}
+	});
+}
 
-	var $btnDismiss = cIPJQ("<button>").text("Dismiss").attr("id", "b2c-btn-dismiss")
-		.addClass("b2c-btn").addClass("b2c-btn-danger")
-		.click(function(e) {
-			cIPJQ("div#b2c-backdrop").remove();
-			cIPJQ("div#b2c-cipDefine-fields").remove();
-		});
-	var $btnSkip = cIPJQ("<button>").text("Skip").attr("id", "b2c-btn-skip")
-		.addClass("b2c-btn").addClass("b2c-btn-info")
-		.css("margin-right", "5px")
-		.click(function() {
-			if(cIPJQ(this).data("step") == 1) {
-				cipDefine.selection.username = null;
-				cipDefine.prepareStep2();
-				cipDefine.markAllPasswordFields(cIPJQ("#b2c-cipDefine-fields"));
-			}
-			else if(cIPJQ(this).data("step") == 2) {
-				cipDefine.selection.password = null;
-				cipDefine.prepareStep3();
-				cipDefine.markAllStringFields(cIPJQ("#b2c-cipDefine-fields"));
-			}
-		});
-	var $btnAgain = cIPJQ("<button>").text("Again").attr("id", "b2c-btn-again")
-		.addClass("b2c-btn").addClass("b2c-btn-warning")
-		.css("margin-right", "5px")
-		.click(function(e) {
-			cipDefine.resetSelection();
-			cipDefine.prepareStep1();
-			cipDefine.markAllUsernameFields(cIPJQ("#b2c-cipDefine-fields"));
-		})
-		.hide();
-	var $btnConfirm = cIPJQ("<button>").text("Confirm").attr("id", "b2c-btn-confirm")
-		.addClass("b2c-btn").addClass("b2c-btn-primary")
-		.css("margin-right", "15px")
-		.click(function(e) {
-			if(!cip.settings["defined-credential-fields"]) {
-				cip.settings["defined-credential-fields"] = {};
-			}
+// Move the instruction box with the mouse (it may cover a field).
+cipDefine.makeDraggable = function(box, handle) {
+	handle.addEventListener("mousedown", function(e) {
+		if(!kphcIsTrusted(e)) {
+			return;
+		}
+		e.preventDefault();
+		var r = box.getBoundingClientRect();
+		var dx = e.clientX - r.left;
+		var dy = e.clientY - r.top;
+		var move = function(ev) {
+			kphcStyle(box, { "left": (ev.clientX - dx) + "px", "top": (ev.clientY - dy) + "px" });
+		};
+		var up = function() {
+			window.removeEventListener("mousemove", move, true);
+			window.removeEventListener("mouseup", up, true);
+		};
+		window.addEventListener("mousemove", move, true);
+		window.addEventListener("mouseup", up, true);
+	});
+}
 
-			if(cipDefine.selection.username) {
-				cipDefine.selection.username = cipFields.prepareId(cipDefine.selection.username);
-			}
-
-			var passwordId = cIPJQ("div#b2c-cipDefine-fields").data("password");
-			if(cipDefine.selection.password) {
-				cipDefine.selection.password = cipFields.prepareId(cipDefine.selection.password);
-			}
-
-			var fieldIds = [];
-			var fieldKeys = Object.keys(cipDefine.selection.fields);
-			for(var i = 0; i < fieldKeys.length; i++) {
-				fieldIds.push(cipFields.prepareId(fieldKeys[i]));
-			}
-
-			cip.settings["defined-credential-fields"][document.location.origin] = {
-				"username": cipDefine.selection.username,
-				"password": cipDefine.selection.password,
-				"fields": fieldIds
-			};
-
-			browser.runtime.sendMessage({
-				action: 'save_defined_credential_fields',
-				args: [cip.settings["defined-credential-fields"][document.location.origin]]
-			});
-
-			cIPJQ("button#b2c-btn-dismiss").click();
-		})
-		.hide();
-
-	$description.append($btnConfirm);
-	$description.append($btnSkip);
-	$description.append($btnAgain);
-	$description.append($btnDismiss);
-
-	if(cip.settings["defined-credential-fields"] && cip.settings["defined-credential-fields"][document.location.origin]) {
-		var $p = cIPJQ("<p>").html("For this page credential fields are already selected and will be overwritten.<br />");
-		var $btnDiscard = cIPJQ("<button>")
-			.attr("id", "b2c-btn-discard")
-			.text("Discard selection")
-			.css("margin-top", "5px")
-			.addClass("b2c-btn")
-			.addClass("b2c-btn-small")
-			.addClass("b2c-btn-danger")
-			.click(function(e) {
-				delete cip.settings["defined-credential-fields"][document.location.origin];
-
-				browser.runtime.sendMessage({
-					action: 'save_defined_credential_fields',
-					args: [null]
-				});
-
-				cIPJQ(this).parent("p").remove();
-			});
-		$p.append($btnDiscard);
-		$description.append($p);
+cipDefine.close = function() {
+	if(cipDefine.ui && cipDefine.ui.host.parentNode) {
+		cipDefine.ui.host.parentNode.removeChild(cipDefine.ui.host);
 	}
+	cipDefine.ui = null;
+}
 
-	cIPJQ("div#b2c-cipDefine-description").draggable();
+cipDefine.confirm = function() {
+	if(!cip.settings["defined-credential-fields"]) {
+		cip.settings["defined-credential-fields"] = {};
+	}
+	var username = cipDefine.selection.username ? cipFields.prepareId(cipDefine.selection.username) : null;
+	var password = cipDefine.selection.password ? cipFields.prepareId(cipDefine.selection.password) : null;
+	var fieldIds = Object.keys(cipDefine.selection.fields).map(function(id) { return cipFields.prepareId(id); });
+	var origin = document.location.origin;
+	cip.settings["defined-credential-fields"][origin] = {
+		"username": username,
+		"password": password,
+		"fields": fieldIds
+	};
+	browser.runtime.sendMessage({
+		action: 'save_defined_credential_fields',
+		args: [cip.settings["defined-credential-fields"][origin]]
+	});
+	cipDefine.close();
 }
 
 cipDefine.resetSelection = function() {
@@ -964,112 +999,114 @@ cipDefine.resetSelection = function() {
 	};
 }
 
-cipDefine.isFieldSelected = function($cipId) {
+cipDefine.isFieldSelected = function(cipId) {
 	return (
-		$cipId == cipDefine.selection.username ||
-		$cipId == cipDefine.selection.password ||
-		$cipId in cipDefine.selection.fields
+		cipId == cipDefine.selection.username ||
+		cipId == cipDefine.selection.password ||
+		cipId in cipDefine.selection.fields
 	);
 }
 
-cipDefine.markAllUsernameFields = function($chooser) {
-	cipDefine.eventFieldClick = function(e) {
-		cipDefine.selection.username = cIPJQ(this).data("cip-id");
-		cIPJQ(this).addClass("b2c-fixed-username-field").text("Username").unbind("click");
-		cipDefine.prepareStep2();
-		cipDefine.markAllPasswordFields(cIPJQ("#b2c-cipDefine-fields"));
-	};
-	cipDefine.markFields($chooser, cipFields.inputQueryPattern);
+cipDefine.setButtons = function(show) {
+	var ui = cipDefine.ui;
+	kphcStyle(ui.btnConfirm, { "display": show.confirm ? "inline-block" : "none" });
+	kphcStyle(ui.btnSkip, { "display": show.skip ? "inline-block" : "none" });
+	kphcStyle(ui.btnAgain, { "display": show.again ? "inline-block" : "none" });
 }
 
-cipDefine.markAllPasswordFields = function($chooser) {
-	cipDefine.eventFieldClick = function(e) {
-		cipDefine.selection.password = cIPJQ(this).data("cip-id");
-		cIPJQ(this).addClass("b2c-fixed-password-field").text("Password").unbind("click");
-		cipDefine.prepareStep3();
-		cipDefine.markAllStringFields(cIPJQ("#b2c-cipDefine-fields"));
-	};
-	cipDefine.markFields($chooser, "input[type='password']");
-}
-
-cipDefine.markAllStringFields = function($chooser) {
-	cipDefine.eventFieldClick = function(e) {
-		cipDefine.selection.fields[cIPJQ(this).data("cip-id")] = true;
-		var count = Object.keys(cipDefine.selection.fields).length;
-		cIPJQ(this).addClass("b2c-fixed-string-field").text("String field #"+count.toString()).unbind("click");
-
-		cIPJQ("button#b2c-btn-confirm:first").addClass("b2c-btn-primary").attr("disabled", false);
-	};
-	cipDefine.markFields($chooser, cipFields.inputQueryPattern + ", select");
-}
-
-cipDefine.markFields = function ($chooser, $pattern) {
-	//var $found = false;
-	cIPJQ($pattern).each(function() {
-		if(cipDefine.isFieldSelected(cIPJQ(this).data("cip-id"))) {
-			//continue
-			return true;
+// Remove the clickable boxes, except those already chosen (kind in keep).
+cipDefine.clearMarks = function(keep) {
+	var marks = cipDefine.ui.fields.querySelectorAll("[data-kphc-field]");
+	for(var i = 0; i < marks.length; i++) {
+		if(keep.indexOf(marks[i].getAttribute("data-kphc-chosen")) < 0) {
+			marks[i].parentNode.removeChild(marks[i]);
 		}
-
-		if(cIPJQ(this).is(":visible") && cIPJQ(this).css("visibility") != "hidden" && cIPJQ(this).css("visibility") != "collapsed") {
-			var $field = cIPJQ("<div>").addClass("b2c-fixed-field")
-				.css("top", cIPJQ(this).offset().top)
-				.css("left", cIPJQ(this).offset().left)
-				.css("width", cIPJQ(this).outerWidth())
-				.css("height", cIPJQ(this).outerHeight())
-				.attr("data-cip-id", cIPJQ(this).attr("data-cip-id"))
-				.click(cipDefine.eventFieldClick)
-				.hover(function() {cIPJQ(this).addClass("b2c-fixed-hover-field");}, function() {cIPJQ(this).removeClass("b2c-fixed-hover-field");});
-			$chooser.append($field);
-			//$found = true;
-		}
-	});
-
-	/* skip step if no entry was found
-	if(!$found) {
-		alert("No username field found.\nContinue with choosing a password field.");
-		cIPJQ("button#b2c-btn-skip").click();
 	}
-	*/
 }
 
 cipDefine.prepareStep1 = function() {
-	cIPJQ("div#b2c-help").text("").css("margin-bottom", 0);
-	cIPJQ("div#b2c-cipDefine-fields").removeData("username");
-	cIPJQ("div#b2c-cipDefine-fields").removeData("password");
-	cIPJQ("div.b2c-fixed-field", cIPJQ("div#b2c-cipDefine-fields")).remove();
-	cIPJQ("div:first", cIPJQ("div#b2c-cipDefine-description")).text("1. Choose a username field");
-	cIPJQ("button#b2c-btn-skip:first").data("step", "1").show();
-	cIPJQ("button#b2c-btn-confirm:first").hide();
-	cIPJQ("button#b2c-btn-again:first").hide();
+	cipDefine.step = 1;
+	cipDefine.clearMarks([]);
+	cipDefine.ui.headline.textContent = "1. Choose a username field";
+	cipDefine.ui.help.textContent = "";
+	cipDefine.setButtons({ skip: true });
+	cipDefine.markFields(cipFields.inputQueryPattern, "username", "Username", "#32cd32");
 }
 
 cipDefine.prepareStep2 = function() {
-	cIPJQ("div#b2c-help").text("").css("margin-bottom", 0);
-	cIPJQ("div.b2c-fixed-field:not(.b2c-fixed-username-field)", cIPJQ("div#b2c-cipDefine-fields")).remove();
-	cIPJQ("div:first", cIPJQ("div#b2c-cipDefine-description")).text("2. Now choose a password field");
-	cIPJQ("button#b2c-btn-skip:first").data("step", "2");
-	cIPJQ("button#b2c-btn-again:first").show();
+	cipDefine.step = 2;
+	cipDefine.clearMarks(["username"]);
+	cipDefine.ui.headline.textContent = "2. Now choose a password field";
+	cipDefine.ui.help.textContent = "";
+	cipDefine.setButtons({ skip: true, again: true });
+	cipDefine.markFields("input[type='password']", "password", "Password", "#ff0000");
 }
 
 cipDefine.prepareStep3 = function() {
-	/* skip step if no entry was found
-	if(!cIPJQ("div#b2c-cipDefine-fields").data("username") && !cIPJQ("div#b2c-cipDefine-fields").data("password")) {
-		alert("Neither an username field nor a password field were selected.\nNothing will be changed and chooser will be closed now.");
-		cIPJQ("button#b2c-btn-dismiss").click();
-		return;
-	}
-	*/
+	cipDefine.step = 3;
+	cipDefine.clearMarks(["username", "password"]);
+	cipDefine.ui.headline.textContent = "3. Confirm selection";
+	cipDefine.ui.help.textContent = "Please confirm your selection or choose more fields as string fields.";
+	cipDefine.setButtons({ confirm: true, again: true });
+	cipDefine.ui.btnConfirm.disabled = !cipDefine.selection.username && !cipDefine.selection.password;
+	kphcStyle(cipDefine.ui.btnConfirm, { "opacity": cipDefine.ui.btnConfirm.disabled ? "0.5" : "1" });
+	cipDefine.markFields(cipFields.inputQueryPattern + ", select", "string", null, "#1e90ff");
+}
 
-	if(!cipDefine.selection.username && !cipDefine.selection.password) {
-		cIPJQ("button#b2c-btn-confirm:first").removeClass("b2c-btn-primary").attr("disabled", true);
-	}
-
-	cIPJQ("div#b2c-help").html("Please confirm your selection or choose more fields as <em>String fields</em>.").css("margin-bottom", "5px");
-	cIPJQ("div.b2c-fixed-field:not(.b2c-fixed-password-field,.b2c-fixed-username-field)", cIPJQ("div#b2c-cipDefine-fields")).remove();
-	cIPJQ("button#b2c-btn-confirm:first").show();
-	cIPJQ("button#b2c-btn-skip:first").data("step", "3").hide();
-	cIPJQ("div:first", cIPJQ("div#b2c-cipDefine-description")).text("3. Confirm selection");
+// One clickable box over each visible field that is not chosen yet.
+cipDefine.markFields = function(pattern, kind, label, color) {
+	cIPJQ(pattern).each(function() {
+		var id = cIPJQ(this).attr("data-cip-id");
+		if(!id || cipDefine.isFieldSelected(id)) {
+			return true;
+		}
+		if(!(cIPJQ(this).is(":visible") && cIPJQ(this).css("visibility") != "hidden" && cIPJQ(this).css("visibility") != "collapsed")) {
+			return true;
+		}
+		var r = this.getBoundingClientRect();
+		var mark = document.createElement("div");
+		mark.setAttribute("data-kphc-field", id);
+		mark.setAttribute("role", "button");
+		kphcStyle(mark, { "position": "absolute", "box-sizing": "border-box", "cursor": "pointer",
+			"left": Math.round(r.left + window.scrollX) + "px", "top": Math.round(r.top + window.scrollY) + "px",
+			"width": Math.round(r.width) + "px", "height": Math.round(r.height) + "px",
+			"border": "2px solid #efefef", "background": "rgba(239,239,239,0.4)",
+			"font": "bold 12px Verdana, Arial, sans-serif", "color": "#efefef", "text-align": "left" });
+		mark.addEventListener("mouseenter", function() {
+			if(!mark.hasAttribute("data-kphc-chosen")) {
+				kphcStyle(mark, { "border-color": "orange" });
+			}
+		});
+		mark.addEventListener("mouseleave", function() {
+			if(!mark.hasAttribute("data-kphc-chosen")) {
+				kphcStyle(mark, { "border-color": "#efefef" });
+			}
+		});
+		cipDefine.onTrustedClick(mark, function() {
+			if(mark.hasAttribute("data-kphc-chosen")) {
+				return;
+			}
+			mark.setAttribute("data-kphc-chosen", kind);
+			kphcStyle(mark, { "border-color": color, "background": "rgba(0,0,0,0.25)" });
+			if(kind == "username") {
+				cipDefine.selection.username = id;
+				mark.textContent = label;
+				cipDefine.prepareStep2();
+			}
+			else if(kind == "password") {
+				cipDefine.selection.password = id;
+				mark.textContent = label;
+				cipDefine.prepareStep3();
+			}
+			else {
+				cipDefine.selection.fields[id] = true;
+				mark.textContent = "String field #" + Object.keys(cipDefine.selection.fields).length;
+				cipDefine.ui.btnConfirm.disabled = false;
+				kphcStyle(cipDefine.ui.btnConfirm, { "opacity": "1" });
+			}
+		});
+		cipDefine.ui.fields.appendChild(mark);
+	});
 }
 
 
