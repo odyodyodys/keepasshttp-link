@@ -1,0 +1,6 @@
+[
+  { "title": "Single site", "url": "http://single.localhost:8080", "login": "user-one", "password": "Dummy-Pass-1", "uuid": "11111111111111111111111111111111" },
+  { "title": "Multi site A", "url": "http://multi.localhost:8080", "login": "alice-test", "password": "Dummy-Pass-A", "uuid": "22222222222222222222222222222222" },
+  { "title": "Multi site B", "url": "http://multi.localhost:8080", "login": "bob-test", "password": "Dummy-Pass-B", "uuid": "33333333333333333333333333333333" },
+  { "title": "Bank", "url": "http://bank.localhost:8080", "login": "bank-user", "password": "Dummy-Bank-Pass", "uuid": "44444444444444444444444444444444" }
+]

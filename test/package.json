@@ -1,0 +1,17 @@
+{
+  "name": "keepasshttp-connector-tests",
+  "private": true,
+  "description": "Local test harness for the keepasshttp-connector fork (Firefox only). Not shipped with the extension.",
+  "type": "module",
+  "scripts": {
+    "lint:ext": "web-ext lint --source-dir ../src",
+    "mock": "node mock-keepasshttp/server.js",
+    "pages": "node pages/server.js",
+    "test": "node run.js"
+  },
+  "devDependencies": {
+    "geckodriver": "8.0.0",
+    "selenium-webdriver": "4.51.0",
+    "web-ext": "10.8.0"
+  }
+}

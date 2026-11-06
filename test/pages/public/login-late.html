@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Late login</title><script src="/instrument.js"></script></head>
+<body>
+  <h1>Login form added after 2.5 s (single page app style)</h1>
+  <div id="app"></div>
+  <script>
+    setTimeout(() => {
+      document.getElementById('app').innerHTML =
+        '<form id="f" action="/submitted" method="post">' +
+        '<input type="text" name="username" id="username">' +
+        '<input type="password" name="password" id="password">' +
+        '<button type="submit">Sign in</button></form>';
+    }, 2500);
+  </script>
+</body>
+</html>
