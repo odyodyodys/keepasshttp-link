@@ -11,7 +11,7 @@ function ownJsFiles(dir) {
   for (const name of readdirSync(dir)) {
     const p = path.join(dir, name);
     if (statSync(p).isDirectory()) out.push(...ownJsFiles(p));
-    else if (name.endsWith('.js') && !name.endsWith('.min.js') && name !== 'browser-polyfill.min.js') out.push(p);
+    else if (name.endsWith('.js') && !name.endsWith('.min.js')) out.push(p);
   }
   return out;
 }
@@ -61,6 +61,6 @@ test('manifest: no deprecated key, no data collection, minimal permissions', () 
   assert.equal(m.web_accessible_resources, undefined);
   // Content script: no jQuery (item 17d), no injected CSS.
   const cs = m.content_scripts[0];
-  assert.deepEqual(cs.js, ['browser-polyfill.min.js', 'kphc.js']);
+  assert.deepEqual(cs.js, ['kphc.js']);
   assert.equal(cs.css, undefined);
 });
