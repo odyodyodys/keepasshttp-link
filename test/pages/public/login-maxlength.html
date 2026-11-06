@@ -1,0 +1,13 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Test login, maxlength</title><script src="/instrument.js"></script></head>
+<body>
+  <h1>Test login (dummy)</h1>
+  <form id="f" action="/submitted" method="post">
+    <input type="text" name="username" id="username" autocomplete="username">
+    <input type="password" name="password" id="password" maxlength="6" autocomplete="current-password">
+    <button type="submit">Sign in</button>
+  </form>
+  <input type="text" id="other" name="other" placeholder="unrelated field">
+</body>
+</html>

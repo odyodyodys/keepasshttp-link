@@ -58,7 +58,6 @@
 			],
 			"js": [
 				"browser-polyfill.min.js",
-				"jquery-3.2.1.min.js",
 				"kphc.js"
 			],
 			"run_at": "document_idle",

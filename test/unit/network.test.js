@@ -59,8 +59,8 @@ test('manifest: no deprecated key, no data collection, minimal permissions', () 
   // Item 17: no file is page-accessible (the page UI is in closed shadow roots,
   // icons are inline SVG), so pages cannot load extension files or learn its URL.
   assert.equal(m.web_accessible_resources, undefined);
-  // Content script: no jQuery UI, no injected CSS.
+  // Content script: no jQuery (item 17d), no injected CSS.
   const cs = m.content_scripts[0];
-  assert.ok(!cs.js.some((f) => /jquery-ui/.test(f)), JSON.stringify(cs.js));
+  assert.deepEqual(cs.js, ['browser-polyfill.min.js', 'kphc.js']);
   assert.equal(cs.css, undefined);
 });

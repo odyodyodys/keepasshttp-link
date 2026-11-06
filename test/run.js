@@ -1105,6 +1105,24 @@ scenarios.shortcut = async function (driver) {
   return { command: probe, both, passOnly, pass: probe && probe.fired === 'onCommand' && both[0] > 0 && both[1] > 0 && passOnly[0] === 0 && passOnly[1] > 0 };
 };
 
+// Item 17d: option "respect maxlength" cuts the filled password to the field
+// maxlength. Before, the fill threw ($.isNumeric, $ undefined in the content script).
+scenarios.maxlength = async function (driver) {
+  await configure(driver, { autoFillSingleEntry: false, respectMaxLength: true });
+  try {
+    await driver.get(PAGES_TLS.replace('{host}', 'single') + '/login-maxlength.html');
+    await sleep(3000);
+    await driver.findElement(By.id('username')).click();
+    await sleep(1000);
+    await clickDropdownItem(driver, 0);
+    await sleep(1200);
+    const s = await pageState(driver);
+    return { usernameLen: s.usernameLen, passwordLen: s.passwordLen, pass: s.usernameLen > 0 && s.passwordLen === 6 };
+  } finally {
+    await configure(driver, { respectMaxLength: false });
+  }
+};
+
 // ---------- main ----------
 const wanted = process.argv.slice(2).filter((a) => scenarios[a]);
 const names = wanted.length ? wanted : Object.keys(scenarios);
