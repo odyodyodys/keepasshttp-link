@@ -40,3 +40,24 @@ test('manifest has no permission for GitHub', () => {
   const m = JSON.parse(readFileSync(path.join(SRC, 'manifest.json'), 'utf8'));
   assert.ok(!m.permissions.some((p) => /github/i.test(p)), JSON.stringify(m.permissions));
 });
+
+// Item 13: manifest uses browser_specific_settings, states that no data is
+// collected, and asks only for the permissions the code uses.
+test('manifest: no deprecated key, no data collection, minimal permissions', () => {
+  const m = JSON.parse(readFileSync(path.join(SRC, 'manifest.json'), 'utf8'));
+  assert.equal(m.applications, undefined);
+  assert.deepEqual(m.browser_specific_settings.gecko.data_collection_permissions, { required: ['none'] });
+  assert.deepEqual([...m.permissions].sort(), [
+    'clipboardWrite',      // item 19: password generator copy / clear
+    'contextMenus',        // "Fill User + Pass" menu
+    'http://*/*',          // content pages, tab URLs, HTTP auth, local KeePassHttp
+    'https://*/*',
+    'storage',
+    'webRequest',          // HTTP Basic Auth (onAuthRequired)
+    'webRequestBlocking',
+  ]);
+  for (const f of m.web_accessible_resources) {
+    if (f.includes('*')) continue;
+    assert.ok(statSync(path.join(SRC, f)).isFile(), 'web_accessible_resources lists a missing file: ' + f);
+  }
+});
