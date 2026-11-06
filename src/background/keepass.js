@@ -33,7 +33,8 @@ keepass.addCredentials = function(callback, tab, username, password, url) {
 }
 
 keepass.updateCredentials = function(callback, tab, entryId, username, password, url) {
-	page.debug("keepass.updateCredentials(callback, {1}, {2}, {3}, [password], {4})", tab.id, entryId, username, url);
+	// Logs never contain usernames, passwords, URLs or protocol payloads.
+	page.debug("keepass.updateCredentials(tab {1}, {2} entry)", tab.id, entryId ? "existing" : "new");
 
 	// unset error message
 	page.tabs[tab.id].errorMessage = null;
@@ -88,7 +89,7 @@ keepass.updateCredentials = function(callback, tab, entryId, username, password,
 }
 
 keepass.retrieveCredentials = function (callback, tab, url, submiturl, forceCallback, triggerUnlock) {
-	page.debug("keepass.retrieveCredentials(callback, {1}, {2}, {3}, {4})", tab.id, url, submiturl, forceCallback);
+	page.debug("keepass.retrieveCredentials(tab {1}, forceCallback {2})", tab.id, forceCallback);
 
 	// unset error message
 	page.tabs[tab.id].errorMessage = null;
@@ -144,7 +145,7 @@ keepass.retrieveCredentials = function (callback, tab, url, submiturl, forceCall
 					}
 				}
 				else {
-					console.log("RetrieveCredentials for " + url + " rejected");
+					console.log("RetrieveCredentials rejected: response check failed");
 				}
 			}
 			else {
@@ -291,7 +292,8 @@ keepass.sendAsync = function(request) {
 		xhr.open("POST", keepass.getPluginUrl(), true);
 		xhr.setRequestHeader("Content-Type", "application/json");
 		xhr.onload = () => {
-			page.debug("Response: {1} => {2}", xhr.status, xhr.responseText);
+			var size = (xhr.responseText || "").length;
+			page.debug("Response: HTTP {1}, {2} bytes", xhr.status, size);
 			resolve([xhr.status, xhr.responseText]);
 		};
 		xhr.onerror = (err) => {
@@ -299,7 +301,7 @@ keepass.sendAsync = function(request) {
 		};
 		try {
 			var r = JSON.stringify(request);
-			page.debug("Request: {1}", r);
+			page.debug("Request: {1}", String(request.RequestType));
 			xhr.send(r);
 		}
 		catch (e) {

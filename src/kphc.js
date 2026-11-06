@@ -528,7 +528,6 @@ cipPassword.copyPasswordToClipboard = function(e) {
 
 cipPassword.callbackGeneratedPassword = function(entries) {
 	if(entries && entries.length >= 1) {
-		console.log(entries[0]);
 		cIPJQ("#cip-genpw-btn-clipboard:first").removeClass("b2c-btn-success");
 		cIPJQ("input#cip-genpw-textfield-password:first").val(entries[0].Password);
 		if(isNaN(entries[0].Login)) {
