@@ -1,8 +1,8 @@
 {
-	"name": "KeePassHttp-Connector",
-	"version": "1.0.11",
+	"name": "KeePassHttp-Neo",
+	"version": "2.0.0",
 	"manifest_version": 2,
-	"description": "KeePass integration for browsers using KeePassHttp",
+	"description": "Fill KeePass logins in Firefox, through the KeePassHttp plugin on localhost.",
 	"icons": {
 		"16": "icons/keepass_16x16.png",
 		"48": "icons/keepass_48x48.png",
@@ -10,7 +10,7 @@
 	},
 	"browser_specific_settings": {
 		"gecko": {
-			"id": "keepasshttp-connector@addons.brandt.tech",
+			"id": "keepasshttp-neo@odyodyodys.github.io",
 			"strict_min_version": "140.0",
 			"data_collection_permissions": {
 				"required": ["none"]
@@ -25,7 +25,7 @@
 			"19": "icons/19x19/icon_normal_blue_19x19.png",
 			"38": "icons/keepass_38x38.png"
 		},
-		"default_title": "KeePassHttp-Connector",
+		"default_title": "KeePassHttp-Neo",
 		"default_popup": "popups/popup.html"
 	},
 	"options_ui": {

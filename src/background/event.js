@@ -8,7 +8,7 @@ cipevent.onMessage = function(request, sender, callback) {
 
 	var kind = senderPolicy.classify(sender, browser.runtime.id, browser.runtime.getURL(""));
 	if(!senderPolicy.isAllowed(kind, request.action)) {
-		console.log("KeePassHttp-Connector: message '" + request.action + "' refused from " + (kind || "unknown sender"));
+		console.log("KeePassHttp-Neo: message '" + request.action + "' refused from " + (kind || "unknown sender"));
 		return;
 	}
 
@@ -53,7 +53,7 @@ cipevent.onContentMessage = function(request, sender, callback) {
 	}
 
 	if(senderPolicy.topOriginOnlyActions[request.action] && senderPolicy.isCrossOriginFrame(sender)) {
-		console.log("KeePassHttp-Connector: '" + request.action + "' refused for a cross-origin iframe");
+		console.log("KeePassHttp-Neo: '" + request.action + "' refused for a cross-origin iframe");
 		if(request.action === "retrieve_credentials") {
 			callback([]);
 			return true;

@@ -1643,7 +1643,7 @@ cipFields.useDefinedCredentialFields = function() {
 
 var cip = {};
 
-// settings of KeePassHttp-Connector
+// settings of KeePassHttp-Neo
 cip.settings = {};
 // username field which will be set on focus
 cip.u = null;
@@ -2172,7 +2172,7 @@ cip.fillIn = async function(combination, onlyPassword, suppressWarnings) {
 			if(countPasswords > 1) {
 				if(!suppressWarnings) {
 					var message = "Error #105\nMore than one login was found in KeePass!\n" +
-					"Press the KeePassHttp-Connector icon for more options.";
+					"Press the KeePassHttp-Neo icon for more options.";
 					browser.runtime.sendMessage({
 						action: 'alert',
 						args: [message]
@@ -2192,7 +2192,7 @@ cip.fillIn = async function(combination, onlyPassword, suppressWarnings) {
 		else {
 			if(!suppressWarnings) {
 					var message = "Error #104\nMore than one login was found in KeePass!\n" +
-					"Press the KeePassHttp-Connector icon for more options.";
+					"Press the KeePassHttp-Neo icon for more options.";
 				browser.runtime.sendMessage({
 					action: 'alert',
 					args: [message]

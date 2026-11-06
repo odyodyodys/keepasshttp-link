@@ -396,7 +396,7 @@ keepass.dropWeakKeys = function(keyring) {
 		}
 	}
 	if (removed > 0) {
-		console.log("KeePassHttp-Connector: removed " + removed + " weak key(s); please connect to KeePass again.");
+		console.log("KeePassHttp-Neo: removed " + removed + " weak key(s); please connect to KeePass again.");
 	}
 	return removed;
 }

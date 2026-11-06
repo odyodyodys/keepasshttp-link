@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 	<head>
-		<title>Settings | KeePassHttp-Connector</title>
+		<title>Settings | KeePassHttp-Neo</title>
 		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 		<link href="bootstrap.min.css" rel="stylesheet" />
 		<link rel="stylesheet" href="../bootstrap-btn.css" />
@@ -72,7 +72,7 @@
 	<body>
 		<div class="container">
 			<div class="masthead">
-				<h3 class="muted"><img src="/icons/keepass_48x48.png" alt="logo" /> KeePassHttp-Connector</h3>
+				<h3 class="muted"><img src="/icons/keepass_48x48.png" alt="logo" /> KeePassHttp-Neo</h3>
 				<div class="navbar">
 					<div class="navbar-inner">
 						<div class="container">
@@ -153,14 +153,14 @@
 					<label class="checkbox">
 						<input type="checkbox" name="autoRetrieveCredentials"/> Automatically retrieve credentials.
 					</label>
-					<span class="help-block">KeePassHttp-Connector will immediately retrieve the credentials when the tab is activated.</span>
+					<span class="help-block">KeePassHttp-Neo will immediately retrieve the credentials when the tab is activated.</span>
 				</p>
 				<hr />
 				<p>
 					<label class="checkbox">
 						<input type="checkbox" name="autoFillSingleEntry"/> Automatically fill-in single credentials entry.
 					</label>
-					<span class="help-block">If KeePassHttp-Connector does only receive a single entry from KeePassHttp it automatically fills this credentials into the found credential fields.</span>
+					<span class="help-block">If KeePassHttp-Neo does only receive a single entry from KeePassHttp it automatically fills this credentials into the found credential fields.</span>
 				</p>
 				<hr />
 				<p>
@@ -171,7 +171,7 @@
 				</p>
 				<hr />
 				<div class="help-block kphVersion">
-					KeePassHttp-Connector needs the plugin KeePassHttp to retrieve credentials from and send them to KeePass.
+					KeePassHttp-Neo needs the plugin KeePassHttp to retrieve credentials from and send them to KeePass.
 					<br />
 					This version is tested with KeePassHttp 2.3.1.0 from <a target="_blank" rel="noopener noreferrer" href="https://github.com/alan-null/keepasshttp">https://github.com/alan-null/keepasshttp</a>
 					<br />
@@ -187,7 +187,7 @@
 						<input type="checkbox" name="autoFillAndSend"/> Auto fill HTTP Auth dialogs and send them.
 					</label>
 					<span class="help-block">
-						If credentials are found for a page and the login-type is an HTTP Auth request, KeePassHttp-Connector tries to login with the first given credentials.
+						If credentials are found for a page and the login-type is an HTTP Auth request, KeePassHttp-Neo tries to login with the first given credentials.
 						<br />
 						An HTTP Auth dialog looks like this:
 					</span>
@@ -201,11 +201,11 @@
 				<div id="dangerousSettings">
 				<br />
 					<p>
-						KeePassHttp-Connector communicates on <em>http://localhost:[port]</em> with KeePassHTTP.
+						KeePassHttp-Neo communicates on <em>http://localhost:[port]</em> with KeePassHTTP.
 						<br />
 						KeePass must run on this computer. Remote KeePass hosts are not supported, because the connection is plain HTTP.
 						<br />
-						Sometimes the default port is still in use and you have to change the port number in KeePassHTTP to get it running. So you have to set the same port number in KeePassHttp-Connector and KeePassHTTP.
+						Sometimes the default port is still in use and you have to change the port number in KeePassHTTP to get it running. So you have to set the same port number in KeePassHttp-Neo and KeePassHTTP.
 					</p>
 					<p>
 						<label for="port">Port:</label>
@@ -329,9 +329,9 @@
 				<h2>Specified credential fields</h2>
 				<hr />
 				<p>
-					If KeePassHttp-Connector detects the wrong credential fields, you are able to specify the correct fields by yourself.
+					If KeePassHttp-Neo detects the wrong credential fields, you are able to specify the correct fields by yourself.
 					<br />
-					Just go to the page and click on the KeePassHttp-Connector-Icon, now select <em>Choose own credential fields for this page</em>.
+					Just go to the page and click on the KeePassHttp-Neo-Icon, now select <em>Choose own credential fields for this page</em>.
 					<br />
 					On this page you can manage theses specified credential fields.
 				</p>
@@ -361,7 +361,7 @@
 							</div>
 							<div class="modal-body">
 								<p>Do you really want to remove the specified credential fields on the page <strong></strong>?</p>
-								<p class="help-block">KeePassHttp-Connector will automatically detect the credential fields the next time you visit this page.</p>
+								<p class="help-block">KeePassHttp-Neo will automatically detect the credential fields the next time you visit this page.</p>
 							</div>
 							<div class="modal-footer">
 								<button class="btn" data-dismiss="modal" aria-hidden="true">Cancel</button>
@@ -388,7 +388,7 @@
 				</p>
 				<hr />
 				<div class="row">
-					<div class="span3">KeePassHttp-Connector Version:</div>
+					<div class="span3">KeePassHttp-Neo Version:</div>
 					<div class="span6"><em class="versionCIP"></em></div>
 				</div>
 				<div class="row">

@@ -25,7 +25,7 @@ mkdirSync(path.join(CACHE, 'profiles'), { recursive: true });
 
 const FIREFOX = process.env.FIREFOX_BIN || 'C:\\Program Files\\Mozilla Firefox\\firefox.exe';
 const GECKODRIVER_VERSION = '0.37.1';
-const EXT_ID = 'keepasshttp-connector@addons.brandt.tech';
+const EXT_ID = 'keepasshttp-neo@odyodyodys.github.io';
 const EXT_UUID = '5b0f6f0e-6b8e-4b7e-9d55-0c1a7e5b9a01'; // fixed so we can open extension pages
 const EXT_BASE = `moz-extension://${EXT_UUID}`;
 const USE_MOCK = process.env.NO_MOCK !== '1';
