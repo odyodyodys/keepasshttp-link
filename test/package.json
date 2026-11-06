@@ -1,14 +1,16 @@
 {
   "name": "keepasshttp-connector-tests",
   "private": true,
-  "description": "Local test harness for the keepasshttp-connector fork (Firefox only). Not shipped with the extension.",
+  "description": "Tests for KeePassHttp-Neo (Firefox only). Not shipped with the extension.",
   "type": "module",
   "scripts": {
     "lint:ext": "web-ext lint --source-dir ../src",
-    "mock": "node mock-keepasshttp/server.js",
-    "pages": "node pages/server.js",
+    "test:unit": "node --test unit/*.test.js",
     "test": "node run.js",
-    "test:unit": "node --test unit/*.test.js"
+    "test:real": "node run.js --real",
+    "test:all": "npm run lint:ext && npm run test:unit && npm test",
+    "mock": "node mock-keepasshttp/server.js",
+    "pages": "node pages/server.js"
   },
   "devDependencies": {
     "geckodriver": "8.0.0",

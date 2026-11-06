@@ -5,9 +5,10 @@
 // Usage:  npm test                       (all scenarios, headless)
 //         HEADLESS=0 npm test            (visible window)
 //         npm test -- single multi       (only some scenarios)
-//         KPH_PORT=19465 NO_MOCK=1 npm test   (use the real test KeePass)
+//         npm run test:real              (use the test KeePass, port 19465)
 //
-// Output: console report + test/artifacts/<scenario>.png + report.json
+// Output: one summary line (exit code 1 on any failure),
+//         test/artifacts/report.json and <scenario>.png
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -28,8 +29,9 @@ const GECKODRIVER_VERSION = '0.37.1';
 const EXT_ID = 'keepasshttp-neo@odyodyodys.github.io';
 const EXT_UUID = '5b0f6f0e-6b8e-4b7e-9d55-0c1a7e5b9a01'; // fixed so we can open extension pages
 const EXT_BASE = `moz-extension://${EXT_UUID}`;
-const USE_MOCK = process.env.NO_MOCK !== '1';
-const KPH_PORT = Number(process.env.KPH_PORT || 19475);
+// --real (or NO_MOCK=1): use the test KeePass (default port 19465) instead of the fake server.
+const USE_MOCK = process.env.NO_MOCK !== '1' && !process.argv.includes('--real');
+const KPH_PORT = Number(process.env.KPH_PORT || (USE_MOCK ? 19475 : 19465));
 const PAGES = 'http://{host}.localhost:8080';
 // Same server and port, over TLS (item 6: auto-fill only on https pages).
 const PAGES_TLS = 'https://{host}.localhost:8080';
@@ -232,6 +234,52 @@ async function clickDropdownItem(driver, index = 0) {
   await (await sr.findElements(By.css('li[role=option]')))[index].click();
 }
 
+// Polls fn() until it returns a truthy value or maxMs passes; returns the last value.
+async function waitFor(fn, maxMs, stepMs = 100) {
+  const end = Date.now() + maxMs;
+  let v = await fn();
+  while (!v && Date.now() < end) {
+    await sleep(stepMs);
+    v = await fn();
+  }
+  return v;
+}
+
+// Loads a page and waits until the extension's login lookup for it is done:
+// a new get-logins request in the server/proxy log, then 400 ms without new
+// requests. Pages that do no lookup wait the full maxMs (the old fixed sleep).
+async function openPage(driver, url, maxMs = 4000) {
+  const since = Date.now();
+  await driver.get(url);
+  await waitFor(async () => {
+    const log = (await kphStats()).log.filter((l) => l.t >= since);
+    return log.some((l) => l.type === 'get-logins') && Date.now() - log[log.length - 1].t >= 400;
+  }, maxMs);
+}
+
+// Clicks a field and waits until the login dropdown shows items (max maxMs).
+async function openDropdown(driver, id = 'username', maxMs = 1500) {
+  await driver.findElement(By.id(id)).click();
+  let d;
+  await waitFor(async () => (d = await dropdownState(driver)).items.length > 0, maxMs);
+  return d;
+}
+
+// Runs fn(extension, selectedTab, ...args) in Firefox's chrome context.
+async function inChrome(driver, fn, ...args) {
+  await driver.setContext(firefox.Context.CHROME);
+  try {
+    return await driver.executeScript(`
+      const { ExtensionParent } = ChromeUtils.importESModule('resource://gre/modules/ExtensionParent.sys.mjs');
+      const [id, ...rest] = arguments;
+      const ext = ExtensionParent.GlobalManager.getExtension(id);
+      const tab = Services.wm.getMostRecentWindow('navigator:browser').gBrowser.selectedTab;
+      return (${fn})(ext, tab, ExtensionParent, ...rest);`, EXT_ID, ...args);
+  } finally {
+    await driver.setContext(firefox.Context.CONTENT);
+  }
+}
+
 async function pageState(driver) {
   const s = await driver.executeScript(function () {
     return {
@@ -278,8 +326,7 @@ const scenarios = {
   async single(driver) {
     await configure(driver, { autoFillSingleEntry: false });
     await kphReset();
-    await driver.get(PAGES.replace('{host}', 'single') + '/login.html');
-    await sleep(4000);
+    await openPage(driver, PAGES.replace('{host}', 'single') + '/login.html', 4000);
     const afterLoad = await pageState(driver);
     const statsLoad = await kphStats();
 
@@ -316,8 +363,7 @@ const scenarios = {
   async autofill(driver) {
     await configure(driver, { autoFillSingleEntry: true });
     await kphReset();
-    await driver.get(PAGES_TLS.replace('{host}', 'single') + '/login.html');
-    await sleep(4000);
+    await openPage(driver, PAGES_TLS.replace('{host}', 'single') + '/login.html', 4000);
     const s = await pageState(driver);
     const stats = await kphStats();
     await configure(driver, { autoFillSingleEntry: false });
@@ -340,8 +386,7 @@ const scenarios = {
   async multi(driver) {
     await configure(driver, { autoFillSingleEntry: false });
     await kphReset();
-    await driver.get(PAGES.replace('{host}', 'multi') + '/login.html');
-    await sleep(4000);
+    await openPage(driver, PAGES.replace('{host}', 'multi') + '/login.html', 4000);
     const stats = await kphStats();
     await driver.findElement(By.id('username')).click();
     await sleep(1200);
@@ -381,8 +426,7 @@ const scenarios = {
   // traffic works again afterwards. Tampering is done by the fake server or proxy.
   async hmac(driver) {
     const loadAndRead = async () => {
-      await driver.get(PAGES_TLS.replace('{host}', 'single') + '/login.html');
-      await sleep(3000);
+      await openPage(driver, PAGES_TLS.replace('{host}', 'single') + '/login.html', 3000);
       return pageState(driver);
     };
     await configure(driver, { autoFillSingleEntry: true });
@@ -468,8 +512,7 @@ const scenarios = {
     const out = {};
     for (const host of ['bank', 'evilbank']) {
       await kphReset();
-      await driver.get(PAGES.replace('{host}', host) + '/login.html');
-      await sleep(4000);
+      await openPage(driver, PAGES.replace('{host}', host) + '/login.html', 4000);
       const st = await kphStats();
       await driver.findElement(By.id('username')).click();
       await sleep(1200);
@@ -493,8 +536,7 @@ const scenarios = {
   async insecure(driver) {
     await configure(driver, { autoFillSingleEntry: true });
     const check = async (url, pick) => {
-      await driver.get(url);
-      await sleep(3000);
+      await openPage(driver, url, 3000);
       const loaded = await pageState(driver);
       await driver.executeScript("document.getElementById('other').focus()");
       await sleep(300);
@@ -530,8 +572,7 @@ const scenarios = {
   async late(driver) {
     await configure(driver, { autoFillSingleEntry: false });
     await kphReset();
-    await driver.get(PAGES.replace('{host}', 'single') + '/login-late.html');
-    await sleep(6000);
+    await openPage(driver, PAGES.replace('{host}', 'single') + '/login-late.html', 6000);
     const stats = await kphStats();
     await driver.findElement(By.id('username')).click();
     await sleep(1200);
@@ -549,8 +590,7 @@ const scenarios = {
   async tabswitch(driver) {
     await configure(driver, { autoFillSingleEntry: true });
     await kphReset();
-    await driver.get(PAGES_TLS.replace('{host}', 'single') + '/login.html');
-    await sleep(3000);
+    await openPage(driver, PAGES_TLS.replace('{host}', 'single') + '/login.html', 3000);
     const before = await kphStats();
     for (let i = 0; i < 2; i++) {
       await openExtPage(driver, 'options/options.html');
@@ -594,11 +634,9 @@ const scenarios = {
       return { hosts: d.hosts, items: d.items.length, passwordFills: countEvents(s.events, 'password', 'input', t0) };
     };
     await configure(driver, { autoFillSingleEntry: false });
-    await driver.get(PAGES.replace('{host}', 'single') + '/login.html');
-    await sleep(3000);
+    await openPage(driver, PAGES.replace('{host}', 'single') + '/login.html', 3000);
     const fresh = await measure();
-    await driver.get(PAGES.replace('{host}', 'single') + '/login.html');
-    await sleep(3000);
+    await openPage(driver, PAGES.replace('{host}', 'single') + '/login.html', 3000);
     await openExtPage(driver, 'options/options.html');
     const sent = await driver.executeAsyncScript(function (done) {
       browser.tabs.query({ url: '*://single.localhost/*' }).then(async (tabs) => {
@@ -621,8 +659,7 @@ const scenarios = {
   // asked for the logins, not every frame of the tab. Runs the real popup page.
   async frames(driver) {
     await configure(driver, { autoFillSingleEntry: false });
-    await driver.get(PAGES_TLS.replace('{host}', 'multi') + '/frames.html');
-    await sleep(4000);
+    await openPage(driver, PAGES_TLS.replace('{host}', 'multi') + '/frames.html', 4000);
     // Open popup_login.html behind the web tab: it reads the active tab (the web tab) on load.
     const popup = await openTabBehind(driver, 'popups/popup_login.html');
     await sleep(1500);
@@ -661,8 +698,7 @@ const scenarios = {
   async definefields(driver) {
     await configure(driver, { autoFillSingleEntry: false, 'defined-credential-fields': {
       'https://other.localhost:8080': { username: 'x', password: 'y', fields: [] } } });
-    await driver.get(PAGES_TLS.replace('{host}', 'single') + '/login.html');
-    await sleep(3000);
+    await openPage(driver, PAGES_TLS.replace('{host}', 'single') + '/login.html', 3000);
     await openExtPage(driver, 'options/options.html');
     await driver.executeAsyncScript(function (done) {
       browser.tabs.query({ url: '*://single.localhost/*' }).then((tabs) =>
@@ -701,8 +737,7 @@ const scenarios = {
     const saved = await readStored();
     const own = saved['https://single.localhost:8080'];
     // The saved fields are used: reload, then the fill command fills them.
-    await driver.get(PAGES_TLS.replace('{host}', 'single') + '/login.html');
-    await sleep(3000);
+    await openPage(driver, PAGES_TLS.replace('{host}', 'single') + '/login.html', 3000);
     await driver.findElement(By.id('password')).click();
     await fireCommand(driver, 'fill-username-password');
     await sleep(1500);
@@ -719,8 +754,7 @@ const scenarios = {
   async iframe(driver) {
     await configure(driver, { autoFillSingleEntry: true });
     await kphReset();
-    await driver.get(PAGES_TLS.replace('{host}', 'single') + '/iframe.html');
-    await sleep(4000);
+    await openPage(driver, PAGES_TLS.replace('{host}', 'single') + '/iframe.html', 4000);
     const stats = await kphStats();
     const inFrame = await frameState(driver);
     const bankRequests = (stats?.log || []).filter((l) => l.type === 'get-logins' && String(l.url).includes('bank')).length;
@@ -732,8 +766,7 @@ const scenarios = {
   async sandbox(driver) {
     await configure(driver, { autoFillSingleEntry: true });
     await kphReset();
-    await driver.get(PAGES_TLS.replace('{host}', 'single') + '/sandbox.html');
-    await sleep(4000);
+    await openPage(driver, PAGES_TLS.replace('{host}', 'single') + '/sandbox.html', 4000);
     const stats = await kphStats();
     const inFrame = await frameState(driver);
     const getLogins = stats?.byType['get-logins'] ?? 0;
@@ -747,15 +780,13 @@ const scenarios = {
 // Real user actions (WebDriver input = trusted events) still fill.
 scenarios.untrusted = async function (driver) {
   await configure(driver, { autoFillSingleEntry: false });
-  await driver.get(PAGES_TLS.replace('{host}', 'multi') + '/login.html');
-  await sleep(3500);
+  await openPage(driver, PAGES_TLS.replace('{host}', 'multi') + '/login.html', 3500);
   const lens = () => driver.executeScript(
     "return [document.getElementById('username').value.length, document.getElementById('password').value.length]");
   // Fresh page for each case: a fill marks the password field as 'unchanged',
   // which a script reset of the values does not undo.
   const clear = async () => {
-    await driver.get(PAGES_TLS.replace('{host}', 'multi') + '/login.html');
-    await sleep(3500);
+    await openPage(driver, PAGES_TLS.replace('{host}', 'multi') + '/login.html', 3500);
   };
   const out = {};
 
@@ -849,8 +880,7 @@ scenarios.untrusted = async function (driver) {
 scenarios.lock = async function (driver) {
   await configure(driver, { autoFillSingleEntry: false });
   await setTamper('none');
-  await driver.get(PAGES_TLS.replace('{host}', 'multi') + '/login.html');
-  await sleep(3500);
+  await openPage(driver, PAGES_TLS.replace('{host}', 'multi') + '/login.html', 3500);
   const items = async () => {
     await driver.findElement(By.id('other')).click();
     await sleep(300);
@@ -936,8 +966,7 @@ scenarios.smallbugs = async function (driver) {
 // working dropdown: styles are set with the CSSOM, which CSP does not block.
 scenarios.csp = async function (driver) {
   await configure(driver, { autoFillSingleEntry: false });
-  await driver.get(PAGES_TLS.replace('{host}', 'multi') + '/login-csp.html');
-  await sleep(3500);
+  await openPage(driver, PAGES_TLS.replace('{host}', 'multi') + '/login-csp.html', 3500);
   await driver.findElement(By.id('username')).click();
   await sleep(1200);
   const d = await dropdownState(driver);
@@ -966,8 +995,7 @@ async function readClipboard(driver) {
 }
 scenarios.generator = async function (driver) {
   await configure(driver, { autoFillSingleEntry: false });
-  await driver.get(PAGES_TLS.replace('{host}', 'multi') + '/login-csp.html');
-  await sleep(3500);
+  await openPage(driver, PAGES_TLS.replace('{host}', 'multi') + '/login-csp.html', 3500);
   const icon = await driver.findElement(By.css('kphc-key'));
   const iconSize = await icon.getRect();
   await icon.click();
@@ -1029,25 +1057,15 @@ async function closeTabIfOpen(driver, handle) {
 // is read from the privileged test context (reading it from an extension page
 // would switch tabs, which clears it).
 async function toolbarPopup(driver) {
-  await driver.setContext(firefox.Context.CHROME);
-  try {
-    return await driver.executeScript(function (id) {
-      const { ExtensionParent } = ChromeUtils.importESModule('resource://gre/modules/ExtensionParent.sys.mjs');
-      const ext = ExtensionParent.GlobalManager.getExtension(id);
-      const ba = ExtensionParent.apiManager.global.browserActionFor(ext);
-      const tab = Services.wm.getMostRecentWindow('navigator:browser').gBrowser.selectedTab;
-      const url = String(ba.action.getProperty(tab, 'popup') || '');
-      return url.slice(url.lastIndexOf('/') + 1);
-    }, EXT_ID);
-  } finally {
-    await driver.setContext(firefox.Context.CONTENT);
-  }
+  return inChrome(driver, (ext, tab, EP) => {
+    const url = String(EP.apiManager.global.browserActionFor(ext).action.getProperty(tab, 'popup') || '');
+    return url.slice(url.lastIndexOf('/') + 1);
+  });
 }
 scenarios.remember = async function (driver) {
   await configure(driver, { autoFillSingleEntry: false });
   const submit = async (user, pass, pick) => {
-    await driver.get(PAGES_TLS.replace('{host}', 'single') + '/login.html');
-    await sleep(3000);
+    await openPage(driver, PAGES_TLS.replace('{host}', 'single') + '/login.html', 3000);
     if (pick) {
       await driver.findElement(By.id('username')).click();
       await sleep(1000);
@@ -1073,26 +1091,15 @@ scenarios.remember = async function (driver) {
 // Fires an extension keyboard command as Firefox does for the real shortcut
 // (WebDriver key events are page events and do not reach browser shortcuts).
 async function fireCommand(driver, name) {
-  await driver.setContext(firefox.Context.CHROME);
-  try {
-    return await driver.executeScript(function (id, name) {
-      const { ExtensionParent } = ChromeUtils.importESModule('resource://gre/modules/ExtensionParent.sys.mjs');
-      const ext = ExtensionParent.GlobalManager.getExtension(id);
-      const sc = ext.shortcuts;
-      const info = {};
-      try { sc.onCommand(name); info.fired = 'onCommand'; } catch (e) { info.err = String(e); }
-      return info;
-    }, EXT_ID, name);
-  } finally {
-    await driver.setContext(firefox.Context.CONTENT);
-  }
+  return inChrome(driver, (ext, tab, EP, name) => {
+    try { ext.shortcuts.onCommand(name); return { fired: 'onCommand' }; } catch (e) { return { err: String(e) }; }
+  }, name);
 }
 scenarios.shortcut = async function (driver) {
   await configure(driver, { autoFillSingleEntry: false });
   let probe = null;
   const press = async (letter) => {
-    await driver.get(PAGES_TLS.replace('{host}', 'single') + '/login.html');
-    await sleep(3000);
+    await openPage(driver, PAGES_TLS.replace('{host}', 'single') + '/login.html', 3000);
     await driver.findElement(By.id('password')).click();
     await sleep(300);
     probe = await fireCommand(driver, letter === 'u' ? 'fill-username-password' : 'fill-password');
@@ -1110,8 +1117,7 @@ scenarios.shortcut = async function (driver) {
 scenarios.maxlength = async function (driver) {
   await configure(driver, { autoFillSingleEntry: false, respectMaxLength: true });
   try {
-    await driver.get(PAGES_TLS.replace('{host}', 'single') + '/login-maxlength.html');
-    await sleep(3000);
+    await openPage(driver, PAGES_TLS.replace('{host}', 'single') + '/login-maxlength.html', 3000);
     await driver.findElement(By.id('username')).click();
     await sleep(1000);
     await clickDropdownItem(driver, 0);
@@ -1148,8 +1154,7 @@ scenarios.iconmove = async function (driver) {
 // Item 19: "Copy to clipboard" in the generator; the clipboard is cleared after 30 s.
 scenarios.clipboard = async function (driver) {
   await configure(driver, { autoFillSingleEntry: false });
-  await driver.get(PAGES_TLS.replace('{host}', 'single') + '/login.html');
-  await sleep(3000);
+  await openPage(driver, PAGES_TLS.replace('{host}', 'single') + '/login.html', 3000);
   await driver.findElement(By.css('kphc-key')).click();
   await sleep(1500);
   const sr = await (await driver.findElement(By.css('kphc-pwgen'))).getShadowRoot();
@@ -1171,8 +1176,7 @@ scenarios.clipboard = async function (driver) {
 // survive both directions (UTF-8) and fill exactly.
 scenarios.utf8 = async function (driver) {
   await configure(driver, { autoFillSingleEntry: false });
-  await driver.get(PAGES.replace('{host}', 'utf8') + '/login.html');
-  await sleep(3000);
+  await openPage(driver, PAGES.replace('{host}', 'utf8') + '/login.html', 3000);
   await driver.findElement(By.id('username')).click();
   await sleep(1200);
   const d = await dropdownState(driver);
@@ -1195,11 +1199,8 @@ scenarios.save = async function (driver) {
   const user = 'save-user-ä';
   const round = async () => {
     const password = 'Δοκιμή-' + Math.random().toString(16).slice(2, 10);
-    await driver.get(page);
-    await sleep(3000);
-    await driver.findElement(By.id('username')).click();
-    await sleep(1000);
-    const before = (await dropdownState(driver)).items;
+    await openPage(driver, page, 3000);
+    const before = (await openDropdown(driver)).items;
     await driver.findElement(By.id('username')).sendKeys(Key.ESCAPE);
     await driver.executeScript("document.getElementById('username').value = ''");
     await driver.findElement(By.id('username')).sendKeys(user);
@@ -1225,11 +1226,8 @@ scenarios.save = async function (driver) {
     await toWebTab(driver);
 
     // Read it back through the normal page flow.
-    await driver.get(page);
-    await sleep(3000);
-    await driver.findElement(By.id('username')).click();
-    await sleep(1000);
-    const after = (await dropdownState(driver)).items;
+    await openPage(driver, page, 3000);
+    const after = (await openDropdown(driver)).items;
     const idx = after.findIndex((l) => l.startsWith(user + ' '));
     if (idx >= 0) await clickDropdownItem(driver, idx);
     await sleep(1200);
@@ -1245,6 +1243,7 @@ scenarios.save = async function (driver) {
 };
 
 // ---------- main ----------
+if (process.argv.includes('--list')) { console.log(Object.keys(scenarios).join(' ')); process.exit(0); }
 const wanted = process.argv.slice(2).filter((a) => scenarios[a]);
 const names = wanted.length ? wanted : Object.keys(scenarios);
 const report = { firefox: null, startedAt: new Date().toISOString(), mock: USE_MOCK, port: KPH_PORT, results: {} };
@@ -1271,6 +1270,11 @@ try {
 } finally {
   if (driver) await driver.quit().catch(() => {});
   writeFileSync(path.join(ART, 'report.json'), JSON.stringify(report, null, 2));
-  console.log(JSON.stringify(report, null, 2));
-  process.exit(report.fatal ? 1 : 0);
+  // Short summary; details are in artifacts/report.json.
+  const failed = Object.entries(report.results).filter(([, v]) => v.error || v.pass === false).map(([k]) => k);
+  const secs = Math.round((Date.now() - Date.parse(report.startedAt)) / 1000);
+  console.log(`${USE_MOCK ? 'fake server' : 'KeePass port ' + KPH_PORT}: ` +
+    `${Object.keys(report.results).length - failed.length}/${names.length} passed in ${secs}s` +
+    (failed.length ? `; FAILED: ${failed.join(', ')}` : '') + (report.fatal ? `; FATAL: ${report.fatal.split('\n')[0]}` : ''));
+  process.exit(report.fatal || failed.length ? 1 : 0);
 }

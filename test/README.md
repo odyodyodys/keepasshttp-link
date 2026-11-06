@@ -18,15 +18,17 @@ All tools are installed locally (`node_modules/`, `.cache/`). No global installs
 
 ```sh
 cd test
+npm run test:all                 # lint + unit tests + all scenarios on the fake server
 npm test                         # all scenarios, headless, fake server
 npm test -- autofill single      # some scenarios
+npm run test:real                # all scenarios on the real test KeePass (see below)
+node run.js --list               # list the scenario names
 HEADLESS=0 npm test              # show the Firefox window
 FF_PWMGR=1 npm test              # keep Firefox's built-in password manager on
-NO_MOCK=1 KPH_PORT=19465 npm test   # use the real test KeePass (see below)
-npm run lint:ext                 # web-ext lint of ../src
 ```
 
-Scenarios: `single`, `autofill`, `multi`, `late`.
+The runner prints one summary line and exits with code 1 if any scenario fails.
+Details per scenario are in `artifacts/report.json`.
 
 ## Notes
 
@@ -53,7 +55,7 @@ open. So the runner associates **once** and then reuses that association:
 
 ```sh
 SETUP=1 NO_MOCK=1 KPH_PORT=19465 node run.js autofill   # confirm the dialog in the TEST KeePass
-NO_MOCK=1 KPH_PORT=19465 node run.js                   # all later runs: no dialog
+npm run test:real                                      # all later runs: no dialog
 ```
 
 - The setup run saves the extension's `keyRing` (key name + AES key) to
