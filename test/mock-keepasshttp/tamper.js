@@ -3,10 +3,12 @@
 // Only successful responses (Success === true) are changed.
 import crypto from 'node:crypto';
 
-export const TAMPER_MODES = ['none', 'hmac-missing', 'hmac-bad', 'nonce-swap'];
+// "locked": every request gets HTTP 503, as KeePassHttp answers when the
+// database is locked (KeePassHttp.cs: StatusCode = ServiceUnavailable).
+export const TAMPER_MODES = ['none', 'hmac-missing', 'hmac-bad', 'nonce-swap', 'locked'];
 
 export function tamper(mode, res) {
-  if (!res || res.Success !== true || mode === 'none') return res;
+  if (!res || res.Success !== true || mode === 'none' || mode === 'locked') return res;
   switch (mode) {
     case 'hmac-missing':
       delete res.Hmac;

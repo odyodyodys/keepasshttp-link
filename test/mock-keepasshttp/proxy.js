@@ -35,6 +35,13 @@ http.createServer(async (req, resp) => {
   stats.total++;
   stats.byType[type] = (stats.byType[type] || 0) + 1;
   stats.log.push(item);
+  if (tamperMode === 'locked') {
+    item.status = 503;
+    resp.writeHead(503);
+    resp.end();
+    console.log(`[proxy] ${type} -> 503 (simulated locked database)`);
+    return;
+  }
   try {
     const r = await fetch(TARGET + req.url, {
       method: req.method,

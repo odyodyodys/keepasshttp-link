@@ -788,6 +788,42 @@ scenarios.untrusted = async function (driver) {
   return out;
 };
 
+// Item 10: when KeePass gets locked (HTTP 503), pages drop their cached
+// logins (with passwords). After unlock, a real focus fetches them again.
+// The fake server / proxy answers 503 in mode "locked" (what KeePassHttp does
+// for a locked database); a real lock needs the KeePass UI.
+scenarios.lock = async function (driver) {
+  await configure(driver, { autoFillSingleEntry: false });
+  await setTamper('none');
+  await driver.get(PAGES_TLS.replace('{host}', 'multi') + '/login.html');
+  await sleep(3500);
+  const items = async () => {
+    await driver.findElement(By.id('other')).click();
+    await sleep(300);
+    await driver.findElement(By.id('username')).click();
+    await sleep(1500);
+    const n = await driver.executeScript("return [...document.querySelectorAll('ul.ui-autocomplete li.ui-menu-item')].filter((li) => li.offsetParent !== null).length");
+    await driver.findElement(By.id('username')).sendKeys(Key.ESCAPE);
+    return n;
+  };
+  const out = {};
+  out.before = await items();
+  try {
+    await setTamper('locked');
+    // A real user action that makes the background talk to KeePass.
+    await driver.findElement(By.css('.cip-genpw-icon')).click();
+    await sleep(1500);
+    await driver.switchTo().activeElement().sendKeys(Key.ESCAPE);
+    await sleep(500);
+    out.whileLocked = await items();
+  } finally {
+    await setTamper('none');
+  }
+  out.afterUnlock = await items();
+  out.pass = out.before === 2 && out.whileLocked === 0 && out.afterUnlock === 2;
+  return out;
+};
+
 // Values and dropdown inside #frame, after focusing its username field.
 async function frameState(driver) {
   await driver.switchTo().frame(await driver.findElement(By.id('frame')));

@@ -4,7 +4,7 @@ function _initialize(tab) {
 	_tab = tab;
 
 	// no credentials set or credentials already cleared
-	if(!_tab.credentials.username) {
+	if(!_tab || !_tab.credentials || !_tab.credentials.username) {
 		_close();
 		return;
 	}

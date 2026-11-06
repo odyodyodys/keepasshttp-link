@@ -73,6 +73,10 @@ browser.runtime.onMessage.addListener(function(req, sender, callback) {
 		}
 		else if (req.action == "clear_credentials") {
 			cipEvents.clearCredentials();
+			// KeePass was locked: fetch again on the next real focus of a username field.
+			if (req.reason === "locked") {
+				cip.refetchOnFocus = true;
+			}
 		}
 		else if (req.action == "activated_tab") {
 			cipEvents.triggerActivatedTab();
@@ -210,11 +214,25 @@ cipAutocomplete.onBlur = function(e) {
 	}
 }
 
-cipAutocomplete.onFocus = function() {
+cipAutocomplete.onFocus = function(e) {
 	cip.u = cIPJQ(this);
+	var field = cIPJQ(this);
 
-	if(cIPJQ(this).val() == "") {
-		cIPJQ(this).autocomplete("search", "");
+	// Still locked: no answer, the flag stays and the next focus tries again.
+	if(cip.refetchOnFocus && kphcIsTrusted(e)) {
+		cip.retrieveCredentials(true).then(function() {
+			if(cip.credentials.length > 0) {
+				cip.refetchOnFocus = false;
+			}
+			if(document.activeElement === field[0] && field.val() == "" && field.hasClass("ui-autocomplete-input")) {
+				field.autocomplete("search", "");
+			}
+		});
+		return;
+	}
+
+	if(field.val() == "" && field.hasClass("ui-autocomplete-input")) {
+		field.autocomplete("search", "");
 	}
 }
 
@@ -1264,6 +1282,8 @@ cip.init = function() {
 // dontAutoFillIn: true = only fill the dropdown, do not auto-fill the fields.
 cip.retrieveInFlight = null;
 cip.autoFilled = false;
+// Set when KeePass was locked: the next trusted focus of a username field fetches again.
+cip.refetchOnFocus = false;
 cip.retrieveCredentials = function(dontAutoFillIn) {
 	if(cip.retrieveInFlight) {
 		return cip.retrieveInFlight;

@@ -311,6 +311,8 @@ keepass.sendAsync = function(request) {
 
 keepass.checkStatus = function (status, tab) {
 	var success = (status >= 200 && status <= 299);
+	var wasClosed = keepass.isDatabaseClosed;
+	var wasAvailable = keepass.isKeePassHttpAvailable;
 	keepass.isDatabaseClosed = false;
 	keepass.isKeePassHttpAvailable = true;
 
@@ -338,6 +340,12 @@ keepass.checkStatus = function (status, tab) {
 				page.tabs[tab.id].errorMessage = "Is KeePassHttp installed and is KeePass running?";
 			}
 		}
+	}
+
+	// KeePass was just locked (HTTP 503) or is gone: drop the logins that pages
+	// still hold, so nothing is filled from old data after the user locked KeePass.
+	if((keepass.isDatabaseClosed && !wasClosed) || (!keepass.isKeePassHttpAvailable && wasAvailable)) {
+		page.clearAllLogins();
 	}
 
 	page.debug("keepass.checkStatus({1}, [tabID]) => {2}", status, success);

@@ -105,6 +105,36 @@ page.clearLogins = function(tabId) {
 	delete page.tabs[tabId].loginFrameId;
 }
 
+// Drop every login the extension holds for pages: the background lists and
+// the content-script caches (with passwords) in all tabs and frames.
+page.clearAllLogins = function() {
+	for(var id in page.tabs) {
+		page.clearLogins(id);
+		page.tabs[id].knownLogins = {};
+	}
+	browser.tabs.query({}).then(function(tabs) {
+		for(var i = 0; i < tabs.length; i++) {
+			browser.tabs.sendMessage(tabs[i].id, { action: "clear_credentials", reason: "locked" }).catch(function() {});
+		}
+	});
+}
+
+// The tab moved to another origin (scheme + host + port): the login lists of
+// the old site must not be shown or used. The "save this login?" data stays,
+// it is needed after the redirect that follows a login.
+page.onTabUrlChanged = function(tabId, url) {
+	var t = page.tabs[tabId];
+	if(!t) {
+		return;
+	}
+	var origin = senderPolicy.frameOrigin(url);
+	if(t.origin !== origin) {
+		page.clearLogins(tabId);
+		t.knownLogins = {};
+		t.origin = origin;
+	}
+}
+
 page.createTabEntry = function(tabId) {
 	//console.log("page.createTabEntry("+tabId+")");
 	page.tabs[tabId] = {

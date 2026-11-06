@@ -68,6 +68,9 @@ browser.tabs.onActivated.addListener(function(activeInfo) {
  * @param {object} changeInfo
  */
 browser.tabs.onUpdated.addListener(function(tabId, changeInfo, tab) {
+	if(changeInfo.url) {
+		page.onTabUrlChanged(tabId, changeInfo.url);
+	}
 	if(changeInfo.status == "complete") {
 		cipevent.invoke(browserAction.removeRememberPopup, null, tabId, []);
 	}

@@ -45,6 +45,9 @@ cipevent.onContentMessage = function(request, sender, callback) {
 	if(!tabInfo.knownLogins) {
 		tabInfo.knownLogins = {};
 	}
+	if(frameId === 0 && tabInfo.origin === undefined) {
+		tabInfo.origin = origin;
+	}
 
 	if(senderPolicy.topOriginOnlyActions[request.action] && senderPolicy.isCrossOriginFrame(sender)) {
 		console.log("KeePassHttp-Connector: '" + request.action + "' refused for a cross-origin iframe");
@@ -61,7 +64,9 @@ cipevent.onContentMessage = function(request, sender, callback) {
 				callback([]);
 				return true;
 			}
-			args = [origin, senderPolicy.submitUrl(a[1]), a[2] === true, a[3] === true];
+			// Always answer (forceCallback), also when KeePass is locked or gone:
+			// else the page waits for an answer that never comes.
+			args = [origin, senderPolicy.submitUrl(a[1]), true, a[3] === true];
 			var reply = callback;
 			callback = function(entries) {
 				if(page.tabs[tabId] && page.tabs[tabId].knownLogins) {

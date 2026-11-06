@@ -181,6 +181,13 @@ const server = http.createServer((req, resp) => {
   req.on('end', () => {
     let r;
     try { r = JSON.parse(body); } catch { return send(400, { Error: 'Bad JSON' }); }
+    if (tamperMode === 'locked') {
+      stats.total++;
+      stats.byType[r.RequestType] = (stats.byType[r.RequestType] || 0) + 1;
+      stats.log.push({ t: Date.now(), type: r.RequestType, status: 503 });
+      resp.writeHead(503);
+      return resp.end();
+    }
     const [code, out] = handle(r);
     send(code, tamper(tamperMode, out));
   });

@@ -80,7 +80,7 @@ test('retrieve_credentials: URL comes from the sender, not from the message', ()
   const { onMessage } = setup();
   const r = onMessage({ action: 'retrieve_credentials', args: ['https://bank.localhost', 'https://bank.localhost/login', 'yes', true] },
     content('https://evil.localhost:8080/page?x=1#y'));
-  assert.deepEqual(plain(r.last.args), ['https://evil.localhost:8080', 'https://bank.localhost/login', false, true]);
+  assert.deepEqual(plain(r.last.args), ['https://evil.localhost:8080', 'https://bank.localhost/login', true, true]);
 });
 
 test('retrieve_credentials: bad submit URL dropped; non-web frame gets nothing', () => {

@@ -204,6 +204,15 @@ browserAction.removeRememberPopup = function(callback, tab, removeImmediately) {
 	}
 };
 
+// blinkTimeout (icon blink time, user setting) + 60 s, at most 10 min.
+browserAction.rememberMaxMillis = function(blinkTimeout) {
+	var blink = Number(blinkTimeout);
+	if(!isFinite(blink) || blink < 0) {
+		blink = BLINK_TIMEOUT_DEFAULT;
+	}
+	return Math.min(blink + 60000, 600000);
+}
+
 browserAction.setRememberPopup = function(tabId, username, password, url, usernameExists, credentialsList) {
 	browser.storage.local.get({'settings': {}}).then(function(item) {
 		var settings = item.settings;
@@ -240,6 +249,18 @@ browserAction.setRememberPopup = function(tabId, username, password, url, userna
 			"usernameExists": usernameExists,
 			"list": credentialsList
 		};
+
+		// Hard limit for the password kept for "save this login?". The icon
+		// timer only runs for the current tab, so a background tab could keep
+		// it until the tab is closed.
+		var creds = page.tabs[id].credentials;
+		setTimeout(function() {
+			if(page.tabs[id] && page.tabs[id].credentials === creds) {
+				browserAction.removeLevelFromStack(null, {"id": id}, 10, "==", true);
+				page.clearCredentials(id);
+				browserAction.show(null, {"id": id});
+			}
+		}, browserAction.rememberMaxMillis(blinkTimeout));
 
 		browserAction.show(null, {"id": id});
 	});
