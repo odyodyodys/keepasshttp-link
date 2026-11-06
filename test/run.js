@@ -1017,6 +1017,49 @@ async function closeTabIfOpen(driver, handle) {
   await driver.close();
 }
 
+// Item 16/17d: "save this login?" after a form submit. The per-tab toolbar popup
+// is read from the privileged test context (reading it from an extension page
+// would switch tabs, which clears it).
+async function toolbarPopup(driver) {
+  await driver.setContext(firefox.Context.CHROME);
+  try {
+    return await driver.executeScript(function (id) {
+      const { ExtensionParent } = ChromeUtils.importESModule('resource://gre/modules/ExtensionParent.sys.mjs');
+      const ext = ExtensionParent.GlobalManager.getExtension(id);
+      const ba = ExtensionParent.apiManager.global.browserActionFor(ext);
+      const tab = Services.wm.getMostRecentWindow('navigator:browser').gBrowser.selectedTab;
+      const url = String(ba.action.getProperty(tab, 'popup') || '');
+      return url.slice(url.lastIndexOf('/') + 1);
+    }, EXT_ID);
+  } finally {
+    await driver.setContext(firefox.Context.CONTENT);
+  }
+}
+scenarios.remember = async function (driver) {
+  await configure(driver, { autoFillSingleEntry: false });
+  const submit = async (user, pass, pick) => {
+    await driver.get(PAGES_TLS.replace('{host}', 'single') + '/login.html');
+    await sleep(3000);
+    if (pick) {
+      await driver.findElement(By.id('username')).click();
+      await sleep(1000);
+      await clickDropdownItem(driver, 0);
+      await sleep(1000);
+    } else {
+      await driver.findElement(By.id('username')).sendKeys(user);
+      await driver.findElement(By.id('password')).sendKeys(pass);
+    }
+    await driver.findElement(By.css('button[type=submit]')).click();
+    await sleep(1500);
+    return toolbarPopup(driver);
+  };
+  // Unchanged login from KeePass first (the save prompt of a new login stays for a while).
+  const unchanged = await submit(null, null, true);
+  const changed = await submit('new-user', 'New-Dummy-Pass-9', false);
+  return { popupAfterUnchanged: unchanged, popupAfterNew: changed,
+    pass: unchanged !== 'popup_remember.html' && changed === 'popup_remember.html' };
+};
+
 // ---------- main ----------
 const wanted = process.argv.slice(2).filter((a) => scenarios[a]);
 const names = wanted.length ? wanted : Object.keys(scenarios);
