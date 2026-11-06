@@ -700,10 +700,18 @@ const scenarios = {
     };
     const saved = await readStored();
     const own = saved['https://single.localhost:8080'];
+    // The saved fields are used: reload, then the fill command fills them.
+    await driver.get(PAGES_TLS.replace('{host}', 'single') + '/login.html');
+    await sleep(3000);
+    await driver.findElement(By.id('password')).click();
+    await fireCommand(driver, 'fill-username-password');
+    await sleep(1500);
+    const ps = await pageState(driver);
+    const filledWithDefined = [ps.usernameLen, ps.passwordLen];
     await configure(driver, { 'defined-credential-fields': {} });
-    return { overlaysClicked: [u, p], pageSeesChooser, chooserClosed, savedOrigins: Object.keys(saved), own,
+    return { overlaysClicked: [u, p], pageSeesChooser, chooserClosed, savedOrigins: Object.keys(saved), own, filledWithDefined,
       pass: u && p && pageSeesChooser === false && chooserClosed && !!own && own.username === 'username' && own.password === 'password' &&
-        !!saved['https://other.localhost:8080'] };
+        !!saved['https://other.localhost:8080'] && filledWithDefined[0] > 0 && filledWithDefined[1] > 0 };
   },
 
   // Item 8: a cross-origin iframe (bank.localhost inside single.localhost)
@@ -1058,6 +1066,43 @@ scenarios.remember = async function (driver) {
   const changed = await submit('new-user', 'New-Dummy-Pass-9', false);
   return { popupAfterUnchanged: unchanged, popupAfterNew: changed,
     pass: unchanged !== 'popup_remember.html' && changed === 'popup_remember.html' };
+};
+
+// Item 17d: the keyboard command "Insert username + password" (Alt+Shift+U) and
+// "Insert a password" (Alt+Shift+P) fill the focused form (path fill_user_pass).
+// Fires an extension keyboard command as Firefox does for the real shortcut
+// (WebDriver key events are page events and do not reach browser shortcuts).
+async function fireCommand(driver, name) {
+  await driver.setContext(firefox.Context.CHROME);
+  try {
+    return await driver.executeScript(function (id, name) {
+      const { ExtensionParent } = ChromeUtils.importESModule('resource://gre/modules/ExtensionParent.sys.mjs');
+      const ext = ExtensionParent.GlobalManager.getExtension(id);
+      const sc = ext.shortcuts;
+      const info = {};
+      try { sc.onCommand(name); info.fired = 'onCommand'; } catch (e) { info.err = String(e); }
+      return info;
+    }, EXT_ID, name);
+  } finally {
+    await driver.setContext(firefox.Context.CONTENT);
+  }
+}
+scenarios.shortcut = async function (driver) {
+  await configure(driver, { autoFillSingleEntry: false });
+  let probe = null;
+  const press = async (letter) => {
+    await driver.get(PAGES_TLS.replace('{host}', 'single') + '/login.html');
+    await sleep(3000);
+    await driver.findElement(By.id('password')).click();
+    await sleep(300);
+    probe = await fireCommand(driver, letter === 'u' ? 'fill-username-password' : 'fill-password');
+    await sleep(1500);
+    const s = await pageState(driver);
+    return [s.usernameLen, s.passwordLen];
+  };
+  const both = await press('u');
+  const passOnly = await press('p');
+  return { command: probe, both, passOnly, pass: probe && probe.fired === 'onCommand' && both[0] > 0 && both[1] > 0 && passOnly[0] === 0 && passOnly[1] > 0 };
 };
 
 // ---------- main ----------
