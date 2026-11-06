@@ -3,11 +3,18 @@
 // pages answer for any host name, so Firefox can use different
 // *.localhost names (set via the network.dns.localDomains pref) to get
 // different origins.
+// The same port also speaks https (first byte 0x16 = TLS handshake), with a
+// self-signed test certificate made by openssl in test/.cache/tls (test
+// profile only: Firefox runs with acceptInsecureCerts).
 //   /basic  -> HTTP Basic Auth (user "basic-user" / "Dummy-Basic-Pass")
 //   GET /__basic, POST /__basic/reset -> counts of /basic requests with and
 //            without an Authorization header (counts only, no values)
 
 import http from 'node:http';
+import https from 'node:https';
+import net from 'node:net';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -55,8 +62,31 @@ async function handler(req, res) {
   }
 }
 
+function testCert() {
+  const dir = path.join(here, '..', '.cache', 'tls');
+  const key = path.join(dir, 'key.pem');
+  const cert = path.join(dir, 'cert.pem');
+  if (!existsSync(key) || !existsSync(cert)) {
+    mkdirSync(dir, { recursive: true });
+    execFileSync('openssl', ['req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:prime256v1',
+      '-nodes', '-keyout', key, '-out', cert, '-days', '30', '-subj', '/CN=kph-test.localhost',
+      '-addext', 'subjectAltName=DNS:localhost,DNS:*.localhost'], { stdio: 'ignore' });
+  }
+  return { key: readFileSync(key), cert: readFileSync(cert) };
+}
+
+const httpServer = http.createServer(handler);
+const httpsServer = https.createServer(testCert(), handler);
 for (const host of ['127.0.0.1', '::1']) {
-  http.createServer(handler)
+  net.createServer((socket) => {
+    socket.once('data', (buf) => {
+      socket.pause();
+      socket.unshift(buf);
+      (buf[0] === 0x16 ? httpsServer : httpServer).emit('connection', socket);
+      process.nextTick(() => socket.resume());
+    });
+    socket.on('error', () => {});
+  })
     .on('error', (e) => console.error(`[pages] ${host}: ${e.message}`))
-    .listen(PORT, host, () => console.log(`[pages] listening on ${host}:${PORT}`));
+    .listen(PORT, host, () => console.log(`[pages] http+https on ${host}:${PORT}`));
 }

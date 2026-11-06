@@ -169,3 +169,20 @@
 	color: #efefef;
 	background-color:rgba(30,144,255,0.4);
 }
+
+/* Not-secure page (no https): red dropdown with a warning line */
+.kphc ul.ui-autocomplete.kphc-insecure {
+	border: 2px solid #b00020 !important;
+	background: #fff0f0 !important;
+	min-width: 300px !important;
+}
+.kphc ul.ui-autocomplete li.kphc-insecure-warning {
+	list-style: none !important;
+	margin: 0 !important;
+	padding: 4px 6px !important;
+	background: #b00020 !important;
+	color: #ffffff !important;
+	font: bold 12px Verdana, Arial, sans-serif !important;
+	text-align: left !important;
+	cursor: default !important;
+}

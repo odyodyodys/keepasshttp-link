@@ -119,6 +119,19 @@ cipAutocomplete.onOpen = function(event, ui) {
 	// NOT BEAUTIFUL!
 	// modifies ALL ui-autocomplete menus of class .ui-menu
 	cIPJQ("ul.ui-autocomplete.ui-menu").css("z-index", 2147483636);
+
+	// Not-secure page: red menu with a warning line on top. The line has no
+	// "ui-menu-item" class, so it cannot be selected (mouse or keyboard).
+	var menu = cIPJQ(this).autocomplete("widget");
+	menu.find("li.kphc-insecure-warning").remove();
+	menu.toggleClass("kphc-insecure", cip.isInsecurePage());
+	if(cip.isInsecurePage()) {
+		cIPJQ("<li>")
+			.addClass("kphc-insecure-warning")
+			.attr("role", "alert")
+			.text(cip.insecureWarningText)
+			.prependTo(menu);
+	}
 }
 
 cipAutocomplete.onSource = function (request, callback) {
@@ -1284,7 +1297,30 @@ cip.retrieveCredentialsCallback = function (credentials, dontAutoFillIn) {
 	}
 }
 
+cip.insecureWarningText = "Not secure: this page or its login form does not use https. Passwords can be read by others on the network.";
+
+// True if the page is not https (loopback hosts excepted, the traffic stays on
+// this computer) or the form sends to a not-https address. On such pages we
+// never auto-fill; the user can still choose a login from the (red) dropdown.
+cip.isLoopbackHost = function(hostname) {
+	return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
+}
+cip.isInsecureUrl = function(url) {
+	try {
+		var u = new URL(url);
+		return u.protocol !== "https:" && !cip.isLoopbackHost(u.hostname);
+	}
+	catch (e) {
+		return true;
+	}
+}
+cip.isInsecurePage = function() {
+	return cip.isInsecureUrl(document.location.href) || (!!cip.submitUrl && cip.isInsecureUrl(cip.submitUrl));
+}
+
 cip.prepareFieldsForCredentials = function(autoFillInForSingle) {
+	// never auto-fill on a not-secure page: show the (red) dropdown instead
+	autoFillInForSingle = autoFillInForSingle && !cip.isInsecurePage();
 	// only one login for this site
 	if (autoFillInForSingle && cip.settings.autoFillSingleEntry === true && cip.credentials.length == 1) {
 		cip.autoFilled = true;

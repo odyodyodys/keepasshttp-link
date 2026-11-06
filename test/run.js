@@ -31,6 +31,8 @@ const EXT_BASE = `moz-extension://${EXT_UUID}`;
 const USE_MOCK = process.env.NO_MOCK !== '1';
 const KPH_PORT = Number(process.env.KPH_PORT || 19475);
 const PAGES = 'http://{host}.localhost:8080';
+// Same server and port, over TLS (item 6: auto-fill only on https pages).
+const PAGES_TLS = 'https://{host}.localhost:8080';
 const HEADLESS = process.env.HEADLESS !== '0';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -72,7 +74,8 @@ async function startFirefox() {
     .setPreference('signon.autofillForms', process.env.FF_PWMGR === '1')
     .setPreference('browser.shell.checkDefaultBrowser', false)
     .setPreference('datareporting.policy.dataSubmissionEnabled', false)
-    .setPreference('app.update.auto', false);
+    .setPreference('app.update.auto', false)
+    .setAcceptInsecureCerts(true); // self-signed test certificate (test profile only)
   if (HEADLESS) opts.addArguments('-headless');
   // --allow-system-access: needed to open moz-extension:// pages from the chrome context (test profile only).
   const service = new firefox.ServiceBuilder(driverPath).addArguments('--allow-system-access', '--profile-root', path.join(CACHE, 'profiles'));
@@ -209,11 +212,14 @@ async function associate(driver) {
 async function pageState(driver) {
   return driver.executeScript(function () {
     const vis = (el) => !!(el && el.offsetParent !== null);
-    const items = [...document.querySelectorAll('ul.ui-autocomplete li')];
+    const items = [...document.querySelectorAll('ul.ui-autocomplete li.ui-menu-item')];
+    const warn = document.querySelector('ul.ui-autocomplete li.kphc-insecure-warning');
     return {
       events: (window.__kph && window.__kph.events) || [],
       autocompleteMenus: document.querySelectorAll('ul.ui-autocomplete').length,
       autocompleteItemsVisible: items.filter(vis).map((li) => li.textContent),
+      insecureWarningVisible: vis(warn),
+      insecureMenu: !!document.querySelector('ul.ui-autocomplete.kphc-insecure'),
       genpwIcons: document.querySelectorAll('.cip-genpw-icon').length,
       usernameLen: (document.getElementById('username') || {}).value?.length ?? null,
       passwordLen: (document.getElementById('password') || {}).value?.length ?? null,
@@ -287,7 +293,7 @@ const scenarios = {
   async autofill(driver) {
     await configure(driver, { autoFillSingleEntry: true });
     await kphReset();
-    await driver.get(PAGES.replace('{host}', 'single') + '/login.html');
+    await driver.get(PAGES_TLS.replace('{host}', 'single') + '/login.html');
     await sleep(4000);
     const s = await pageState(driver);
     const stats = await kphStats();
@@ -351,7 +357,7 @@ const scenarios = {
   // traffic works again afterwards. Tampering is done by the fake server or proxy.
   async hmac(driver) {
     const loadAndRead = async () => {
-      await driver.get(PAGES.replace('{host}', 'single') + '/login.html');
+      await driver.get(PAGES_TLS.replace('{host}', 'single') + '/login.html');
       await sleep(3000);
       return pageState(driver);
     };
@@ -431,6 +437,71 @@ const scenarios = {
     };
   },
 
+  // Item 6 (measurement): does KeePass return the "bank.localhost" entry on
+  // the look-alike host "evilbank.localhost"? Plugin host match has no dot boundary.
+  async lookalike(driver) {
+    await configure(driver, { autoFillSingleEntry: false });
+    const out = {};
+    for (const host of ['bank', 'evilbank']) {
+      await kphReset();
+      await driver.get(PAGES.replace('{host}', host) + '/login.html');
+      await sleep(4000);
+      const st = await kphStats();
+      await driver.findElement(By.id('username')).click();
+      await sleep(1200);
+      const s = await pageState(driver);
+      await driver.findElement(By.id('username')).sendKeys(Key.ESCAPE);
+      out[host] = {
+        entriesReturned: st.log.filter((l) => l.type === 'get-logins').map((l) => l.entries ?? (l.url ? 'mock' : null)),
+        dropdown: s.autocompleteItemsVisible,
+        requestTimeline: timeline(st),
+      };
+    }
+    out.bankFound = out.bank.dropdown.length === 1;
+    out.leak = out.evilbank.dropdown.length > 0;
+    out.pass = out.bankFound && !out.leak;
+    return out;
+  },
+
+  // Item 6: on a not-secure page (http, or https with a form posting to http)
+  // nothing is auto-filled and the dropdown is red with a warning line. The
+  // user can still choose the login. On https: no warning, auto-fill works.
+  async insecure(driver) {
+    await configure(driver, { autoFillSingleEntry: true });
+    const check = async (url, pick) => {
+      await driver.get(url);
+      await sleep(3000);
+      const loaded = await pageState(driver);
+      await driver.executeScript("document.getElementById('other').focus()");
+      await sleep(300);
+      await driver.findElement(By.id('username')).click();
+      await sleep(1200);
+      const open = await pageState(driver);
+      if (open.insecureWarningVisible && pick) {
+        writeFileSync(path.join(ART, 'insecure-dropdown.png'), await driver.takeScreenshot(), 'base64');
+      }
+      let picked = null;
+      if (pick && open.autocompleteItemsVisible.length) {
+        await driver.findElement(By.css('ul.ui-autocomplete li.ui-menu-item')).click();
+        await sleep(1000);
+        picked = (await pageState(driver)).passwordLen;
+      }
+      await driver.findElement(By.id('username')).sendKeys(Key.ESCAPE).catch(() => {});
+      return { autoFilledPasswordLen: loaded.passwordLen, items: open.autocompleteItemsVisible.length,
+        warning: open.insecureWarningVisible, redMenu: open.insecureMenu, passwordLenAfterPick: picked };
+    };
+    const http = await check(PAGES.replace('{host}', 'single') + '/login.html', true);
+    const httpAction = await check(PAGES_TLS.replace('{host}', 'single') + '/login-httpaction.html', false);
+    const tls = await check(PAGES_TLS.replace('{host}', 'single') + '/login.html', false);
+    await configure(driver, { autoFillSingleEntry: false });
+    return {
+      http, httpsFormToHttp: httpAction, https: tls,
+      pass: http.autoFilledPasswordLen === 0 && http.warning && http.redMenu && http.items === 1 && http.passwordLenAfterPick > 0 &&
+        httpAction.autoFilledPasswordLen === 0 && httpAction.warning &&
+        tls.autoFilledPasswordLen > 0 && !tls.warning && !tls.redMenu,
+    };
+  },
+
   // Form appears after 2.5 s.
   async late(driver) {
     await configure(driver, { autoFillSingleEntry: false });
@@ -454,7 +525,7 @@ const scenarios = {
   async tabswitch(driver) {
     await configure(driver, { autoFillSingleEntry: true });
     await kphReset();
-    await driver.get(PAGES.replace('{host}', 'single') + '/login.html');
+    await driver.get(PAGES_TLS.replace('{host}', 'single') + '/login.html');
     await sleep(3000);
     const before = await kphStats();
     for (let i = 0; i < 2; i++) {
