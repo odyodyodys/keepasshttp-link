@@ -52,7 +52,8 @@ button,
 	color: var(--text);
 	cursor: pointer;
 
-	&:hover:not(:disabled) {
+	/* Not for the colored buttons: their white text would sit on the light hover color. */
+	&:hover:not(:disabled, .primary, .success, .danger) {
 		background: var(--hover);
 	}
 	&:focus-visible {
