@@ -12,6 +12,8 @@
 
 KeePassHttp-Neo is a Firefox extension. It finds login forms on web pages and fills them with entries from your [KeePass](https://keepass.info) database. It talks to KeePass through the [KeePassHttp](https://github.com/alan-null/keepasshttp) plugin, on your own computer only.
 
+<p align="center"><img src="documentation/images/architecture.svg" width="900" alt="Firefox with the KeePassHttp-Neo extension connects over localhost to KeePass with the KeePassHttp plugin."></p>
+
 It is a modified version of [KeePassHttp-Connector](https://github.com/smorks/keepasshttp-connector), which is no longer maintained. This version fixes security problems, removes old libraries and adds automated tests. See the [closed issues](https://github.com/odyodyodys/keepasshttp-neo/issues?q=is%3Aissue+is%3Aclosed) for the full list of changes.
 
 ## Contents
@@ -43,8 +45,6 @@ It is a modified version of [KeePassHttp-Connector](https://github.com/smorks/ke
 - **No data collection**, no online calls, and no third-party code in web pages.
 
 ## Requirements
-
-<p align="center"><img src="documentation/images/architecture.svg" width="900" alt="Firefox with the KeePassHttp-Neo extension connects over localhost to KeePass with the KeePassHttp plugin."></p>
 
 | Part | Version |
 |---|---|
