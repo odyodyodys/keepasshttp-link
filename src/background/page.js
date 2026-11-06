@@ -92,6 +92,7 @@ page.clearCredentials = function(tabId, complete) {
 
 	if(complete) {
 		page.clearLogins(tabId);
+		page.tabs[tabId].knownLogins = {};
 
 		browser.tabs.sendMessage(tabId, {
 			action: "clear_credentials"
@@ -101,6 +102,7 @@ page.clearCredentials = function(tabId, complete) {
 
 page.clearLogins = function(tabId) {
 	page.tabs[tabId].loginList = [];
+	delete page.tabs[tabId].loginFrameId;
 }
 
 page.createTabEntry = function(tabId) {
@@ -108,7 +110,9 @@ page.createTabEntry = function(tabId) {
 	page.tabs[tabId] = {
 		"stack": [],
 		"errorMessage": null,
-		"loginList": {}
+		"loginList": {},
+		// frameId -> [{Login, Name, Uuid}] last returned to that frame (no passwords)
+		"knownLogins": {}
 	};
 }
 

@@ -590,7 +590,106 @@ const scenarios = {
     return { tabsFound: sent, rendersFresh: fresh, rendersAfterRedetect: afterRedetect,
       pass: sent === 1 && fresh > 0 && afterRedetect === fresh };
   },
+
+  // Item 7 (B7): a login chosen in the login popup fills only the frame that
+  // asked for the logins, not every frame of the tab. Runs the real popup page.
+  async frames(driver) {
+    await configure(driver, { autoFillSingleEntry: false });
+    await driver.get(PAGES_TLS.replace('{host}', 'multi') + '/frames.html');
+    await sleep(4000);
+    // Open popup_login.html behind the web tab: it reads the active tab (the web tab) on load.
+    const popup = await openTabBehind(driver, 'popups/popup_login.html');
+    await sleep(1500);
+    await driver.switchTo().window(popup);
+    // Selecting this tab cleared the page credentials (by design). Let the page
+    // fetch them again, as after a tab return, then click the first login.
+    const res = await driver.executeAsyncScript(function (done) {
+      browser.tabs.query({ url: '*://multi.localhost/*' }).then(async (tabs) => {
+        await browser.tabs.sendMessage(tabs[0].id, { action: 'activated_tab' }).catch(() => {});
+        await new Promise((r) => setTimeout(r, 2500));
+        const bg = await browser.runtime.getBackgroundPage();
+        const labels = [...document.querySelectorAll('#login-list a')].map((a) => a.textContent);
+        const loginFrameId = bg.page.tabs[tabs[0].id].loginFrameId;
+        const a = document.getElementById('0');
+        if (a) a.click();
+        done({ labels: labels.length, loginFrameId });
+      }, (e) => done({ error: String(e) }));
+    });
+    await sleep(1500);
+    await closeTabIfOpen(driver, popup);
+    await toWebTab(driver);
+    const top = await driver.executeScript("return document.getElementById('username').value.length + document.getElementById('password').value.length");
+    await driver.switchTo().frame(await driver.findElement(By.id('frame')));
+    const inner = await driver.executeScript("return document.getElementById('username').value.length + document.getElementById('password').value.length");
+    await driver.switchTo().defaultContent();
+    const filledFrames = (top > 0 ? 1 : 0) + (inner > 0 ? 1 : 0);
+    return { popup: res, topFilledChars: top, iframeFilledChars: inner, filledFrames,
+      pass: typeof res.loginFrameId === 'number' && filledFrames === 1 &&
+        ((res.loginFrameId === 0) === (top > 0)) };
+  },
+
+  // Item 7: "choose own credential fields" still saves, for this origin only,
+  // through the new restricted message (content scripts may not save settings).
+  async definefields(driver) {
+    await configure(driver, { autoFillSingleEntry: false, 'defined-credential-fields': {
+      'https://other.localhost:8080': { username: 'x', password: 'y', fields: [] } } });
+    await driver.get(PAGES_TLS.replace('{host}', 'single') + '/login.html');
+    await sleep(3000);
+    await openExtPage(driver, 'options/options.html');
+    await driver.executeAsyncScript(function (done) {
+      browser.tabs.query({ url: '*://single.localhost/*' }).then((tabs) =>
+        browser.tabs.sendMessage(tabs[0].id, { action: 'choose_credential_fields' })).then(() => done(), () => done());
+    });
+    await toWebTab(driver);
+    await sleep(800);
+    const clickOverlay = (n) => driver.executeScript(
+      `const f = document.querySelectorAll('#b2c-cipDefine-fields .b2c-fixed-field:not(.b2c-fixed-username-field):not(.b2c-fixed-password-field)'); if (f[${n}]) { f[${n}].click(); return true; } return false;`);
+    const u = await clickOverlay(0);
+    await sleep(300);
+    const p = await clickOverlay(0);
+    await sleep(300);
+    await driver.executeScript("document.getElementById('b2c-btn-confirm').click()");
+    await sleep(1000);
+    const readStored = async () => {
+      await openExtPage(driver, 'options/options.html');
+      const v = await driver.executeAsyncScript(function (done) {
+        browser.storage.local.get({ settings: {} }).then((it) => done(it.settings['defined-credential-fields'] || {}));
+      });
+      await toWebTab(driver);
+      return v;
+    };
+    const saved = await readStored();
+    const own = saved['https://single.localhost:8080'];
+    await configure(driver, { 'defined-credential-fields': {} });
+    return { overlaysClicked: [u, p], savedOrigins: Object.keys(saved), own,
+      pass: u && p && !!own && own.username === 'username' && own.password === 'password' &&
+        !!saved['https://other.localhost:8080'] };
+  },
 };
+
+// Opens an extension page in a new tab without selecting it.
+async function openTabBehind(driver, rel) {
+  const url = `${EXT_BASE}/${rel}`;
+  if (!webHandle) webHandle = await driver.getWindowHandle();
+  const before = new Set(await driver.getAllWindowHandles());
+  await driver.setContext(firefox.Context.CHROME);
+  await driver.executeScript(function (u) {
+    const w = Services.wm.getMostRecentWindow('navigator:browser');
+    w.gBrowser.addTab(u, { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(), inBackground: true });
+  }, url);
+  await driver.setContext(firefox.Context.CONTENT);
+  for (let i = 0; i < 20; i++) {
+    await sleep(200);
+    const h = (await driver.getAllWindowHandles()).find((x) => !before.has(x) && x !== extHandle);
+    if (h) return h;
+  }
+  throw new Error('tab did not open: ' + rel);
+}
+async function closeTabIfOpen(driver, handle) {
+  if (!(await driver.getAllWindowHandles()).includes(handle)) return;
+  await driver.switchTo().window(handle);
+  await driver.close();
+}
 
 // ---------- main ----------
 const wanted = process.argv.slice(2).filter((a) => scenarios[a]);

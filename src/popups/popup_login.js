@@ -15,10 +15,12 @@ $(function() {
 				a.setAttribute("id", "" + i);
 				a.addEventListener('click', function(e) {
 					var id = e.target.id;
+					// Only the frame that asked for the logins fills them.
+					var frameId = global.page.tabs[tab.id].loginFrameId;
 					browser.tabs.sendMessage(tab.id, {
 						action: 'fill_user_pass_with_specific_login',
 						id: id
-					});
+					}, { frameId: (typeof frameId === "number") ? frameId : 0 });
 					close();
 				});
 				ul.appendChild(li);

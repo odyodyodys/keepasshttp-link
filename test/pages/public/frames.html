@@ -1,0 +1,13 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Login form plus login form in a cross-origin iframe</title><script src="/instrument.js"></script></head>
+<body>
+  <h1>Top page (multi.localhost) with a login form, iframe (single.localhost) with a login form</h1>
+  <form id="f" action="/submitted" method="post">
+    <input type="text" name="username" id="username" autocomplete="username">
+    <input type="password" name="password" id="password" autocomplete="current-password">
+    <button type="submit">Sign in</button>
+  </form>
+  <iframe id="frame" src="https://single.localhost:8080/login.html" width="600" height="250"></iframe>
+</body>
+</html>

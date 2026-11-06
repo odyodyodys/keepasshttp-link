@@ -659,8 +659,8 @@ cipDefine.initDescription = function() {
 			};
 
 			browser.runtime.sendMessage({
-				action: 'save_settings',
-				args: [cip.settings]
+				action: 'save_defined_credential_fields',
+				args: [cip.settings["defined-credential-fields"][document.location.origin]]
 			});
 
 			cIPJQ("button#b2c-btn-dismiss").click();
@@ -685,12 +685,8 @@ cipDefine.initDescription = function() {
 				delete cip.settings["defined-credential-fields"][document.location.origin];
 
 				browser.runtime.sendMessage({
-					action: 'save_settings',
-					args: [cip.settings]
-				});
-
-				browser.runtime.sendMessage({
-					action: 'load_settings'
+					action: 'save_defined_credential_fields',
+					args: [null]
 				});
 
 				cIPJQ(this).parent("p").remove();
@@ -1213,7 +1209,8 @@ cip.retrieveCredentials = function(dontAutoFillIn) {
 	}
 	var p = browser.runtime.sendMessage({
 		'action': 'retrieve_credentials',
-		'args': [ cip.url, cip.submitUrl ]
+		// The background takes the page URL from Firefox, not from here.
+		'args': [ null, cip.submitUrl ]
 	}).then(function(credentials) {
 		return cip.retrieveCredentialsCallback(credentials, dontAutoFillIn);
 	});
@@ -1453,7 +1450,7 @@ cip.fillInCredentials = function(combination, onlyPassword, suppressWarnings) {
 
 		browser.runtime.sendMessage({
 			'action': 'retrieve_credentials',
-			'args': [ cip.url, cip.submitUrl, false, true ]
+			'args': [ null, cip.submitUrl, false, true ]
 		}).then(function(credentials) {
 			cip.retrieveCredentialsCallback(credentials, true);
 			cip.fillIn(combination, onlyPassword, suppressWarnings);
@@ -1760,52 +1757,20 @@ cip.rememberCredentials = function(usernameValue, passwordValue) {
 		return false;
 	}
 
-	var usernameExists = false;
-
 	var nothingChanged = false;
 	for(var i = 0; i < cip.credentials.length; i++) {
 		if(cip.credentials[i].Login == usernameValue && cip.credentials[i].Password == passwordValue) {
 			nothingChanged = true;
 			break;
 		}
-
-		if(cip.credentials[i].Login == usernameValue) {
-			usernameExists = true;
-		}
 	}
 
 	if(!nothingChanged) {
-		if(!usernameExists) {
-			for(var i = 0; i < cip.credentials.length; i++) {
-				if(cip.credentials[i].Login == usernameValue) {
-					usernameExists = true;
-					break;
-				}
-			}
-		}
-		var credentialsList = [];
-		for(var i = 0; i < cip.credentials.length; i++) {
-			credentialsList.push({
-				"Login": cip.credentials[i].Login,
-				"Name": cip.credentials[i].Name,
-				"Uuid": cip.credentials[i].Uuid
-			});
-		}
-
-		var url = cIPJQ(this)[0].action;
-		if(!url) {
-			url = document.location.href;
-			if(url.indexOf("?") > 0) {
-				url = url.substring(0, url.indexOf("?"));
-				if(url.length < document.location.origin.length) {
-					url = document.location.origin;
-				}
-			}
-		}
-
+		// The background adds the page URL (from Firefox) and the list of known
+		// entries for this frame. It does not trust values from the page.
 		browser.runtime.sendMessage({
 			'action': 'set_remember_credentials',
-			'args': [usernameValue, passwordValue, url, usernameExists, credentialsList]
+			'args': [usernameValue, passwordValue]
 		});
 
 		return true;
