@@ -12,6 +12,7 @@ var senderPolicy = {};
 senderPolicy.contentActions = {
 	"alert": true,
 	"generate_password": true,
+	"get_secret": true,
 	"load_settings": true,
 	"page_clear_logins": true,
 	"popup_login": true,
@@ -64,6 +65,7 @@ senderPolicy.isCrossOriginFrame = function(sender) {
 
 // Actions refused to cross-origin iframes: no logins in, no logins out.
 senderPolicy.topOriginOnlyActions = {
+	"get_secret": true,
 	"popup_login": true,
 	"retrieve_credentials": true,
 	"set_remember_credentials": true
@@ -166,6 +168,78 @@ senderPolicy.settingsForOrigin = function(settings, origin) {
 		copy["defined-credential-fields"][origin] = all[origin];
 	}
 	return copy;
+}
+
+// Passwords stay in the background (item 16). The page gets each entry
+// without Password and without string-field values, plus a random reference
+// (SecretRef). At fill time the page sends the reference and gets the secret
+// back (see secretFor). An empty list keeps the previous secrets, as the page
+// also keeps its previous list then.
+// Returns the list for the page; stores the secrets in tabInfo.secrets[frameId].
+senderPolicy.splitSecrets = function(tabInfo, frameId, origin, entries) {
+	if(!Array.isArray(entries) || entries.length === 0) {
+		return Array.isArray(entries) ? entries : [];
+	}
+	var byRef = {};
+	var out = [];
+	for(var i = 0; i < entries.length; i++) {
+		var e = entries[i] || {};
+		var ref = senderPolicy.newRef();
+		var fields = Array.isArray(e.StringFields) ? e.StringFields : [];
+		byRef[ref] = {
+			"Login": String(e.Login || ""),
+			"Password": String(e.Password || ""),
+			"StringFields": fields.map(function(f) { return { "Key": String(f.Key || ""), "Value": String(f.Value || "") }; })
+		};
+		var pub = {
+			"Login": String(e.Login || ""),
+			"Name": String(e.Name || ""),
+			"Uuid": String(e.Uuid || ""),
+			"SecretRef": ref
+		};
+		if(fields.length > 0) {
+			pub.StringFields = fields.map(function(f) { return { "Key": String(f.Key || "") }; });
+		}
+		out.push(pub);
+	}
+	if(!tabInfo.secrets) {
+		tabInfo.secrets = {};
+	}
+	tabInfo.secrets[frameId] = { "origin": origin, "byRef": byRef };
+	return out;
+}
+
+// 128-bit random reference, hex.
+senderPolicy.newRef = function() {
+	var b = new Uint8Array(16);
+	crypto.getRandomValues(b);
+	return Array.from(b).map(function(x) { return (x < 16 ? "0" : "") + x.toString(16); }).join("");
+}
+
+// Secret for a reference from this frame's latest list, only for the same
+// origin as when the list was given. Else null.
+senderPolicy.secretFor = function(tabInfo, frameId, origin, ref) {
+	var s = tabInfo && tabInfo.secrets && tabInfo.secrets[frameId];
+	if(!s || !origin || s.origin !== origin || typeof ref !== "string"
+		|| !Object.prototype.hasOwnProperty.call(s.byRef, ref)) {
+		return null;
+	}
+	var v = s.byRef[ref];
+	return { "Password": v.Password, "StringFields": v.StringFields.map(function(f) { return { "Key": f.Key, "Value": f.Value }; }) };
+}
+
+// True if this frame already has an entry with exactly this login and password.
+senderPolicy.isKnownSecret = function(tabInfo, frameId, username, password) {
+	var s = tabInfo && tabInfo.secrets && tabInfo.secrets[frameId];
+	if(!s) {
+		return false;
+	}
+	for(var ref in s.byRef) {
+		if(s.byRef[ref].Login === username && s.byRef[ref].Password === password) {
+			return true;
+		}
+	}
+	return false;
 }
 
 // Entries returned to a frame, without passwords: used later for the

@@ -37,19 +37,17 @@ browser.runtime.onMessage.addListener(function(req, sender, callback) {
 			if(cip.credentials[req.id]) {
 				var combination = null;
 				if (cip.u) {
-					cip.setValueWithChange(cip.u, cip.credentials[req.id].Login);
 					combination = cipFields.getCombination("username", cip.u);
-					cip.u.focus();
 				}
 				if (cip.p) {
-					cip.setValueWithChange(cip.p, cip.credentials[req.id].Password);
 					combination = cipFields.getCombination("password", cip.p);
 				}
-
-				var list = {};
-				if(cip.fillInStringFields(combination.fields, cip.credentials[req.id].StringFields, list)) {
-					cipForm.destroy(false, {"password": list.list[0], "username": list.list[1]});
-				}
+				var u = cip.u;
+				cip.fillEntry(req.id, cip.u, cip.p, combination ? combination.fields : null, {}).then(function() {
+					if (u) {
+						u.focus();
+					}
+				});
 			}
 			// wish I could clear out _logins and _u, but a subsequent
 			// selection may be requested.
@@ -1408,20 +1406,12 @@ cip.prepareFieldsForCredentials = function(autoFillInForSingle) {
 			combination = cipFields.combinations[0];
 		}
 		if (cip.u) {
-			cip.setValueWithChange(cip.u, cip.credentials[0].Login);
 			combination = cipFields.getCombination("username", cip.u);
 		}
 		if (cip.p) {
-			cip.setValueWithChange(cip.p, cip.credentials[0].Password);
 			combination = cipFields.getCombination("password", cip.p);
 		}
-
-		if(combination) {
-			var list = {};
-			if(cip.fillInStringFields(combination.fields, cip.credentials[0].StringFields, list)) {
-				cipForm.destroy(false, {"password": list.list[0], "username": list.list[1]});
-			}
-		}
+		cip.fillEntry(0, cip.u, cip.p, combination ? combination.fields : null, {});
 
 		// generate popup-list of usernames + descriptions
 		browser.runtime.sendMessage({
@@ -1646,7 +1636,47 @@ cip.setValueWithChange = function(field, value) {
 	field[0].dispatchEvent(new Event('change', {'bubbles': true}));
 }
 
-cip.fillIn = function(combination, onlyPassword, suppressWarnings) {
+// Fills login, password and string fields of entry i. The password is not in
+// the page: it is asked from the background now, by the entry's SecretRef
+// (item 16). opts: onlyPassword (do not set the login), forcePasswordType,
+// markUnchanged. Resolves to true if a field was filled.
+cip.getSecret = function(entry) {
+	if (!entry || typeof entry.SecretRef !== "string") {
+		return Promise.resolve(null);
+	}
+	return browser.runtime.sendMessage({ 'action': 'get_secret', 'args': [entry.SecretRef] }).catch(function() { return null; });
+}
+
+cip.fillEntry = async function(i, uField, pField, stringFieldIds, opts) {
+	var entry = cip.credentials[i];
+	var secret = await cip.getSecret(entry);
+	if (!secret || cip.credentials[i] !== entry) {
+		return false;
+	}
+	var filledIn = false;
+	if (uField && !opts.onlyPassword) {
+		cip.setValueWithChange(uField, entry.Login);
+		filledIn = true;
+	}
+	if (pField) {
+		if (opts.forcePasswordType) {
+			pField.attr("type", "password");
+		}
+		cip.setValueWithChange(pField, secret.Password);
+		if (opts.markUnchanged) {
+			pField.data("unchanged", true);
+		}
+		filledIn = true;
+	}
+	var list = {};
+	if (cip.fillInStringFields(stringFieldIds, secret.StringFields, list)) {
+		cipForm.destroy(false, {"password": list.list[0], "username": list.list[1]});
+		filledIn = true;
+	}
+	return filledIn;
+}
+
+cip.fillIn = async function(combination, onlyPassword, suppressWarnings) {
 	// no credentials available
 	if (cip.credentials.length == 0 && !suppressWarnings) {
 		var message = "No logins found.";
@@ -1662,23 +1692,8 @@ cip.fillIn = function(combination, onlyPassword, suppressWarnings) {
 
 	// exactly one pair of credentials available
 	if (cip.credentials.length == 1) {
-		var filledIn = false;
-		if(uField && !onlyPassword) {
-			cip.setValueWithChange(uField, cip.credentials[0].Login);
-			filledIn = true;
-		}
-		if(pField) {
-			pField.attr("type", "password");
-			cip.setValueWithChange(pField, cip.credentials[0].Password);
-			pField.data("unchanged", true);
-			filledIn = true;
-		}
-
-		var list = {};
-		if(cip.fillInStringFields(combination.fields, cip.credentials[0].StringFields, list)) {
-			cipForm.destroy(false, {"password": list.list[0], "username": list.list[1]});
-			filledIn = true;
-		}
+		var filledIn = await cip.fillEntry(0, uField, pField, combination.fields,
+			{ onlyPassword: onlyPassword, forcePasswordType: true, markUnchanged: true });
 
 		if(!filledIn) {
 			if(!suppressWarnings) {
@@ -1692,23 +1707,8 @@ cip.fillIn = function(combination, onlyPassword, suppressWarnings) {
 	}
 	// specific login id given
 	else if(combination.loginId != undefined && cip.credentials[combination.loginId]) {
-		var filledIn = false;
-		if(uField) {
-			cip.setValueWithChange(uField, cip.credentials[combination.loginId].Login);
-			filledIn = true;
-		}
-
-		if(pField) {
-			cip.setValueWithChange(pField, cip.credentials[combination.loginId].Password);
-			pField.data("unchanged", true);
-			filledIn = true;
-		}
-
-		var list = {};
-		if(cip.fillInStringFields(combination.fields, cip.credentials[combination.loginId].StringFields, list)) {
-			cipForm.destroy(false, {"password": list.list[0], "username": list.list[1]});
-			filledIn = true;
-		}
+		var filledIn = await cip.fillEntry(combination.loginId, uField, pField, combination.fields,
+			{ markUnchanged: true });
 
 		if(!filledIn) {
 			if(!suppressWarnings) {
@@ -1726,18 +1726,14 @@ cip.fillIn = function(combination, onlyPassword, suppressWarnings) {
 		var countPasswords = 0;
 
 		if(uField) {
-			var valPassword = "";
-			var valUsername = "";
-			var valStringFields = [];
+			var valIndex = -1;
 			var valQueryUsername = uField.val().toLowerCase();
 
 			// find passwords to given username (even those with empty username)
 			for (var i = 0; i < cip.credentials.length; i++) {
 				if(cip.credentials[i].Login.toLowerCase() == valQueryUsername) {
 					countPasswords += 1;
-					valPassword = cip.credentials[i].Password;
-					valUsername = cip.credentials[i].Login;
-					valStringFields = cip.credentials[i].StringFields;
+					valIndex = i;
 				}
 			}
 
@@ -1748,18 +1744,8 @@ cip.fillIn = function(combination, onlyPassword, suppressWarnings) {
 
 			// only one mapping username found
 			if(countPasswords == 1) {
-				if(!onlyPassword) {
-					cip.setValueWithChange(uField, valUsername);
-				}
-				if(pField) {
-					cip.setValueWithChange(pField, valPassword);
-					pField.data("unchanged", true);
-				}
-
-				var list = {};
-				if(cip.fillInStringFields(combination.fields, valStringFields, list)) {
-					cipForm.destroy(false, {"password": list.list[0], "username": list.list[1]});
-				}
+				await cip.fillEntry(valIndex, uField, pField, combination.fields,
+					{ onlyPassword: onlyPassword, markUnchanged: true });
 			}
 
 			// user has to select correct credentials by himself
@@ -1837,26 +1823,16 @@ cip.rememberCredentials = function(usernameValue, passwordValue) {
 		return false;
 	}
 
-	var nothingChanged = false;
-	for(var i = 0; i < cip.credentials.length; i++) {
-		if(cip.credentials[i].Login == usernameValue && cip.credentials[i].Password == passwordValue) {
-			nothingChanged = true;
-			break;
-		}
-	}
+	// The background adds the page URL (from Firefox) and the list of known
+	// entries for this frame. It does not trust values from the page. The page
+	// has no passwords (item 16), so the background also drops a login that is
+	// already in KeePass unchanged.
+	browser.runtime.sendMessage({
+		'action': 'set_remember_credentials',
+		'args': [usernameValue, passwordValue]
+	});
 
-	if(!nothingChanged) {
-		// The background adds the page URL (from Firefox) and the list of known
-		// entries for this frame. It does not trust values from the page.
-		browser.runtime.sendMessage({
-			'action': 'set_remember_credentials',
-			'args': [usernameValue, passwordValue]
-		});
-
-		return true;
-	}
-
-	return false;
+	return true;
 };
 
 cIPJQ(function() {

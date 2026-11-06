@@ -36,7 +36,7 @@ function loadEventGate(ctx, sent) {
   vm.runInContext('var cipevent = {};' + src.slice(start, end), ctx);
   const names = ['alert', 'associate', 'load_keyring', 'save_settings', 'retrieve_credentials',
     'set_remember_credentials', 'popup_login', 'load_settings', 'save_defined_credential_fields',
-    'page_clear_logins', 'generate_password', 'show_default_browseraction', 'update_credentials'];
+    'page_clear_logins', 'generate_password', 'show_default_browseraction', 'update_credentials', 'get_secret'];
   ctx.cipevent.messageHandlers = {};
   for (const n of names) ctx.cipevent.messageHandlers[n] = n;
   ctx.cipevent.invoke = (handler, callback, tabId, args) => sent.invoked.push({ handler, callback, tabId, args });
@@ -177,4 +177,58 @@ test('cross-origin iframe: retrieve gets [], popup_login and save are dropped', 
   // same-origin iframe still works
   const so = onMessage({ action: 'retrieve_credentials', args: [] }, frame('https://a.localhost/login', 'https://a.localhost/'));
   assert.equal(so.last.args[0], 'https://a.localhost');
+});
+
+// Item 16: passwords stay in the background until a fill.
+test('retrieve: the page gets no passwords or string-field values, only a SecretRef', () => {
+  const { onMessage, page } = setup();
+  const r = onMessage({ action: 'retrieve_credentials', args: [] }, content('https://a.localhost/login', 0));
+  r.last.callback([{ Login: 'user-one', Password: 'Dummy-Pass-1', Name: 'A', Uuid: 'u1',
+    StringFields: [{ Key: 'KPH: pin', Value: '1234' }] }]);
+  const sent = plain(r.replies[0]);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].Password, undefined);
+  assert.deepEqual(sent[0].StringFields, [{ Key: 'KPH: pin' }]);
+  assert.match(sent[0].SecretRef, /^[0-9a-f]{32}$/);
+  assert.ok(!JSON.stringify(sent).includes('Dummy-Pass-1') && !JSON.stringify(sent).includes('1234'));
+  assert.equal(page.tabs[3].secrets[0].origin, 'https://a.localhost');
+});
+
+test('get_secret: only same tab, frame, origin and a ref from the latest list', () => {
+  const { onMessage } = setup();
+  const r = onMessage({ action: 'retrieve_credentials', args: [] }, content('https://a.localhost/login', 0));
+  r.last.callback([{ Login: 'user-one', Password: 'Dummy-Pass-1', Name: 'A', Uuid: 'u1' }]);
+  const ref = r.replies[0][0].SecretRef;
+  const ask = (sender, x = ref) => onMessage({ action: 'get_secret', args: [x] }, sender).replies[0];
+
+  assert.deepEqual(plain(ask(content('https://a.localhost/other', 0))), { Password: 'Dummy-Pass-1', StringFields: [] });
+  assert.equal(ask(content('https://a.localhost/', 2)), null);          // other frame
+  assert.equal(ask(content('https://evil.localhost/', 0)), null);       // other origin, same frame id
+  assert.equal(ask(content('https://a.localhost/', 0), 'f'.repeat(32)), null); // unknown ref
+  assert.equal(ask(content('https://a.localhost/', 0), { toString: () => ref }), null);
+
+  // A new list replaces the old refs.
+  const r2 = onMessage({ action: 'retrieve_credentials', args: [] }, content('https://a.localhost/login', 0));
+  r2.last.callback([{ Login: 'user-two', Password: 'Dummy-Pass-2', Name: 'B', Uuid: 'u2' }]);
+  assert.equal(ask(content('https://a.localhost/', 0)), null);
+  // page_clear_logins drops the frame's secrets.
+  onMessage({ action: 'page_clear_logins', args: [] }, content('https://a.localhost/', 0));
+  assert.equal(ask(content('https://a.localhost/', 0), r2.replies[0][0].SecretRef), null);
+});
+
+test('set_remember_credentials: a login already in KeePass unchanged is dropped', () => {
+  const { onMessage, sent } = setup();
+  const r = onMessage({ action: 'retrieve_credentials', args: [] }, content('https://a.localhost/login', 0));
+  r.last.callback([{ Login: 'user-one', Password: 'Dummy-Pass-1', Name: 'A', Uuid: 'u1' }]);
+  const before = sent.invoked.length;
+  onMessage({ action: 'set_remember_credentials', args: ['user-one', 'Dummy-Pass-1'] }, content('https://a.localhost/login', 0));
+  assert.equal(sent.invoked.length, before);
+  onMessage({ action: 'set_remember_credentials', args: ['user-one', 'New-Dummy-Pass'] }, content('https://a.localhost/login', 0));
+  assert.equal(sent.invoked.length, before + 1);
+});
+
+test('get_secret from an extension page gets null', () => {
+  const { onMessage } = setup();
+  const r = onMessage({ action: 'get_secret', args: ['x'] }, popup);
+  assert.equal(r.last.handler, 'get_secret');
 });

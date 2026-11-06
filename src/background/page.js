@@ -92,6 +92,7 @@ page.clearCredentials = function(tabId, complete) {
 	if(complete) {
 		page.clearLogins(tabId);
 		page.tabs[tabId].knownLogins = {};
+		page.tabs[tabId].secrets = {};
 
 		browser.tabs.sendMessage(tabId, {
 			action: "clear_credentials"
@@ -110,6 +111,7 @@ page.clearAllLogins = function() {
 	for(var id in page.tabs) {
 		page.clearLogins(id);
 		page.tabs[id].knownLogins = {};
+		page.tabs[id].secrets = {};
 	}
 	browser.tabs.query({}).then(function(tabs) {
 		for(var i = 0; i < tabs.length; i++) {
@@ -130,6 +132,7 @@ page.onTabUrlChanged = function(tabId, url) {
 	if(t.origin !== origin) {
 		page.clearLogins(tabId);
 		t.knownLogins = {};
+		t.secrets = {};
 		t.origin = origin;
 	}
 }
@@ -141,7 +144,9 @@ page.createTabEntry = function(tabId) {
 		"errorMessage": null,
 		"loginList": {},
 		// frameId -> [{Login, Name, Uuid}] last returned to that frame (no passwords)
-		"knownLogins": {}
+		"knownLogins": {},
+		// frameId -> {origin, byRef: {ref: {Login, Password, StringFields}}} (item 16)
+		"secrets": {}
 	};
 }
 

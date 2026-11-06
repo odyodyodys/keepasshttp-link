@@ -45,6 +45,9 @@ cipevent.onContentMessage = function(request, sender, callback) {
 	if(!tabInfo.knownLogins) {
 		tabInfo.knownLogins = {};
 	}
+	if(!tabInfo.secrets) {
+		tabInfo.secrets = {};
+	}
 	if(frameId === 0 && tabInfo.origin === undefined) {
 		tabInfo.origin = origin;
 	}
@@ -69,10 +72,16 @@ cipevent.onContentMessage = function(request, sender, callback) {
 			args = [origin, senderPolicy.submitUrl(a[1]), true, a[3] === true];
 			var reply = callback;
 			callback = function(entries) {
-				if(page.tabs[tabId] && page.tabs[tabId].knownLogins) {
-					page.tabs[tabId].knownLogins[frameId] = senderPolicy.knownLogins(entries);
+				var t = page.tabs[tabId];
+				if(!t) {
+					reply([]);
+					return;
 				}
-				reply(entries);
+				if(t.knownLogins) {
+					t.knownLogins[frameId] = senderPolicy.knownLogins(entries);
+				}
+				// The page gets no passwords; they stay here until a fill.
+				reply(senderPolicy.splitSecrets(t, frameId, origin, entries));
 			};
 			break;
 		case "set_remember_credentials":
@@ -80,6 +89,10 @@ cipevent.onContentMessage = function(request, sender, callback) {
 			var password = senderPolicy.str(a[1]);
 			var url = senderPolicy.saveUrl(sender.url);
 			if(username === null || password === null || !url) {
+				return;
+			}
+			// Same login and password as an entry KeePass gave this frame: nothing to save.
+			if(senderPolicy.isKnownSecret(tabInfo, frameId, username, password)) {
 				return;
 			}
 			var list = tabInfo.knownLogins[frameId] || [];
@@ -92,7 +105,11 @@ cipevent.onContentMessage = function(request, sender, callback) {
 			break;
 		case "page_clear_logins":
 			delete tabInfo.knownLogins[frameId];
+			delete tabInfo.secrets[frameId];
 			break;
+		case "get_secret":
+			callback(senderPolicy.secretFor(tabInfo, frameId, origin, a[0]));
+			return true;
 		case "alert":
 			args = [senderPolicy.text(a[0], 1000)];
 			break;
@@ -361,6 +378,8 @@ cipevent.messageHandlers = {
 	'show_default_browseraction': browserAction.showDefault,
 	'update_credentials': keepass.updateCredentials,
 	'save_defined_credential_fields': cipevent.onSaveDefinedFields,
+	// Content scripts only (handled in onContentMessage); extension pages get null.
+	'get_secret': function(callback) { if(callback) { callback(null); } },
 	'set_remember_credentials': cipevent.onSetRememberPopup,
 	'stack_add': browserAction.stackAdd,
 	'generate_password': keepass.generatePassword,
