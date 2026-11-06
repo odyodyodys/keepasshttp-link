@@ -102,10 +102,13 @@ cipAutocomplete.init = function(field) {
 			select: cipAutocomplete.onSelect,
 			open: cipAutocomplete.onOpen
 		});
+	// Namespaced and removed first, so a second init does not add a second set
+	// of handlers (that caused double searches and double fills on blur).
 	field
-		.click(cipAutocomplete.onClick)
-		.blur(cipAutocomplete.onBlur)
-		.focus(cipAutocomplete.onFocus);
+		.off(".kphcAc")
+		.on("click.kphcAc", cipAutocomplete.onClick)
+		.on("blur.kphcAc", cipAutocomplete.onBlur)
+		.on("focus.kphcAc", cipAutocomplete.onFocus);
 }
 
 cipAutocomplete.onClick = function() {
@@ -1140,36 +1143,87 @@ cip.submitUrl = null;
 // received credentials from KeePassHTTP
 cip.credentials = [];
 
+// Polls for login fields that appear later. Only started when the first init
+// found no credential fields (else the first tick re-initialised the same
+// fields: double request, double fill). Only one timer at a time.
+cip.detectTimer = null;
 cip.detectNewActiveFields = function() {
-	const divDetect = setInterval(function() {
+	if(cip.detectTimer !== null) {
+		return;
+	}
+	cip.detectTimer = setInterval(function() {
 		if (document.visibilityState !== 'hidden') {
 			const fields = cipFields.getAllFields();
 
 			// If only password field is shown it's enough to have one field visible for initCredentialFields
 			if (fields.length > (_detectedFields == 1 ? 0 : 1)) {
+				clearInterval(cip.detectTimer);
+				cip.detectTimer = null;
 				cip.initCredentialFields(true);
-				clearInterval(divDetect);
 			}
 		}
 	}, 1000);
 };
 
-cip.init = function() {
-	browser.runtime.sendMessage({
-		"action": "load_settings",
-	}).then(function(settings) {
-		cip.settings = settings;
-		cip.initCredentialFields();
+// Single entry point for page start. Safe to call more than once.
+cip.started = false;
+cip.start = function() {
+	if(cip.started) {
+		return;
+	}
+	cip.started = true;
+	cip.init().then(function(found) {
+		if(found === false) {
+			cip.detectNewActiveFields();
+		}
 	});
 }
 
+// Resolves to true/false (credential fields found or not), or null if skipped.
+cip.init = function() {
+	return browser.runtime.sendMessage({
+		"action": "load_settings",
+	}).then(function(settings) {
+		cip.settings = settings;
+		return cip.initCredentialFields();
+	});
+}
+
+// One retrieve_credentials at a time per page: a second caller gets the
+// pending request instead of sending a new one.
+// dontAutoFillIn: true = only fill the dropdown, do not auto-fill the fields.
+cip.retrieveInFlight = null;
+cip.autoFilled = false;
+cip.retrieveCredentials = function(dontAutoFillIn) {
+	if(cip.retrieveInFlight) {
+		return cip.retrieveInFlight;
+	}
+	var p = browser.runtime.sendMessage({
+		'action': 'retrieve_credentials',
+		'args': [ cip.url, cip.submitUrl ]
+	}).then(function(credentials) {
+		return cip.retrieveCredentialsCallback(credentials, dontAutoFillIn);
+	});
+	var done = function() {
+		if(cip.retrieveInFlight === p) {
+			cip.retrieveInFlight = null;
+		}
+	};
+	cip.retrieveInFlight = p;
+	p.then(done, done);
+	// The background does not always answer (e.g. not connected): do not block forever.
+	setTimeout(done, 15000);
+	return p;
+}
+
+// Resolves to true/false (credential fields found or not), or null if skipped.
 cip.initCredentialFields = function(forceCall) {
 	if(_called.initCredentialFields && !forceCall) {
-		return;
+		return Promise.resolve(null);
 	}
 	_called.initCredentialFields = true;
 
-	browser.runtime.sendMessage({ 'action': 'page_clear_logins' }).then(() => {
+	return browser.runtime.sendMessage({ 'action': 'page_clear_logins' }).then(() => {
 		var inputs = cipFields.getAllFields();
 		cipFields.prepareVisibleFieldsWithID("select");
 		cip.initPasswordGenerator(inputs);
@@ -1184,18 +1238,16 @@ cip.initCredentialFields = function(forceCall) {
 			browser.runtime.sendMessage({
 				'action': 'show_default_browseraction'
 			});
-			return;
+			return false;
 		}
 
 		cip.url = document.location.origin;
 		cip.submitUrl = cip.getFormActionUrl(cipFields.combinations[0]);
 
 		if(cip.settings.autoRetrieveCredentials === true) {
-			browser.runtime.sendMessage({
-				'action': 'retrieve_credentials',
-				'args': [ cip.url, cip.submitUrl ]
-			}).then(cip.retrieveCredentialsCallback);
+			cip.retrieveCredentials();
 		}
+		return true;
 	});
 } // end function init
 
@@ -1213,14 +1265,14 @@ cip.initPasswordGenerator = function(inputs) {
 
 cip.receiveCredentialsIfNecessary = function () {
 	if(cip.credentials.length == 0) {
-		browser.runtime.sendMessage({
-			'action': 'retrieve_credentials',
-			'args': [ cip.url, cip.submitUrl ]
-		}).then(cip.retrieveCredentialsCallback);
+		cip.retrieveCredentials();
 	}
 }
 
 cip.retrieveCredentialsCallback = function (credentials, dontAutoFillIn) {
+	if (!Array.isArray(credentials)) {
+		return;
+	}
 	if (cipFields.combinations.length > 0) {
 		cip.u = _f(cipFields.combinations[0].username);
 		cip.p = _f(cipFields.combinations[0].password);
@@ -1235,6 +1287,7 @@ cip.retrieveCredentialsCallback = function (credentials, dontAutoFillIn) {
 cip.prepareFieldsForCredentials = function(autoFillInForSingle) {
 	// only one login for this site
 	if (autoFillInForSingle && cip.settings.autoFillSingleEntry === true && cip.credentials.length == 1) {
+		cip.autoFilled = true;
 		var combination = null;
 		if(!cip.p && !cip.u && cipFields.combinations.length > 0) {
 			cip.u = _f(cipFields.combinations[0].username);
@@ -1726,8 +1779,7 @@ cip.rememberCredentials = function(usernameValue, passwordValue) {
 };
 
 cIPJQ(function() {
-	cip.init();
-	cip.detectNewActiveFields();
+	cip.start();
 });
 
 var cipEvents = {};
@@ -1748,16 +1800,26 @@ cipEvents.clearCredentials = function() {
 	}
 }
 
+// Tab became active. Leaving a tab clears its credentials (background
+// "clear_credentials"), so fetch again for the dropdown, but do not auto-fill
+// again if this page was already auto-filled (before, every tab switch filled
+// the fields again). If KeePass was locked at load, the first fill happens now.
 cipEvents.triggerActivatedTab = function() {
-	// doesn't run a second time because of _called.initCredentialFields set to true
-	cip.init();
-
-	// initCredentialFields calls also "retrieve_credentials", to prevent it
-	// check of init() was already called
-	if(_called.initCredentialFields && (cip.url || cip.submitUrl) && cip.settings.autoRetrieveCredentials === true) {
-		browser.runtime.sendMessage({
-			'action': 'retrieve_credentials',
-			'args': [ cip.url, cip.submitUrl ]
-		}).then(cip.retrieveCredentialsCallback);
+	if(!cip.started) {
+		cip.start();
+		return;
 	}
+	if(!_called.initCredentialFields) {
+		return; // first init still running
+	}
+
+	browser.runtime.sendMessage({
+		"action": "load_settings",
+	}).then(function(settings) {
+		cip.settings = settings;
+		if((cip.url || cip.submitUrl) && cipFields.combinations.length > 0 && cip.settings.autoRetrieveCredentials === true
+			&& cip.credentials.length == 0) {
+			cip.retrieveCredentials(cip.autoFilled);
+		}
+	});
 }

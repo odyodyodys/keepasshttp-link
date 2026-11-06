@@ -143,6 +143,9 @@ async function configure(driver, settingsPatch) {
   }, Object.assign({ hostname: 'remote.invalid', port: String(EXT_PORT) }, settingsPatch))
     .then((r) => { if (r !== true) throw new Error('configure: ' + r); });
   await toWebTab(driver);
+  // Returning to the web tab makes the open page fetch again (its credentials
+  // were cleared when it lost focus). Let that finish before a scenario counts.
+  await sleep(1000);
 }
 
 // Real KeePass: the plugin always shows a modal "associate" dialog and blocks
@@ -274,6 +277,9 @@ const scenarios = {
       afterLoad: { usernameLen: afterLoad.usernameLen, passwordLen: afterLoad.passwordLen },
       requestTimeline: timeline(statsEnd),
       fillTimeline: fillTimeline(afterBlur.events),
+      // Item 4: one request per page load, none extra on focus/blur.
+      pass: statsLoad?.byType['get-logins'] === 1 && statsEnd?.byType['get-logins'] === 1 &&
+        afterFocus.autocompleteItemsVisible.length === 1,
     };
   },
 
@@ -295,6 +301,9 @@ const scenarios = {
       filled: { usernameLen: s.usernameLen, passwordLen: s.passwordLen },
       requestTimeline: timeline(stats),
       fillTimeline: fillTimeline(s.events),
+      // Item 4: exactly one request and one fill per field.
+      pass: stats?.byType['get-logins'] === 1 && countEvents(s.events, 'username', 'input') === 1 &&
+        countEvents(s.events, 'password', 'input') === 1 && s.passwordLen > 0,
     };
   },
 
@@ -312,6 +321,7 @@ const scenarios = {
       getLoginsOnLoad: stats?.byType['get-logins'] ?? 'n/a',
       autocompleteItemsOnFocus: s.autocompleteItemsVisible,
       autocompleteMenus: s.autocompleteMenus,
+      pass: stats?.byType['get-logins'] === 1 && s.autocompleteItemsVisible.length === 2,
     };
   },
 
@@ -395,7 +405,79 @@ const scenarios = {
       getLoginsTotal: stats?.byType['get-logins'] ?? 'n/a',
       requests: stats?.byType,
       autocompleteItemsOnFocus: s.autocompleteItemsVisible,
+      pass: stats?.byType['get-logins'] === 1 && s.autocompleteItemsVisible.length === 1,
     };
+  },
+
+  // Item 4: switching to another tab and back must not fill again. Leaving a
+  // tab clears its credentials, so at most one new request per return is OK.
+  async tabswitch(driver) {
+    await configure(driver, { autoFillSingleEntry: true });
+    await kphReset();
+    await driver.get(PAGES.replace('{host}', 'single') + '/login.html');
+    await sleep(3000);
+    const before = await kphStats();
+    for (let i = 0; i < 2; i++) {
+      await openExtPage(driver, 'options/options.html');
+      await sleep(500);
+      await toWebTab(driver);
+      await sleep(1500);
+    }
+    const s = await pageState(driver);
+    const after = await kphStats();
+    await configure(driver, { autoFillSingleEntry: false });
+    return {
+      getLoginsOnLoad: before?.byType['get-logins'],
+      getLoginsAfterSwitches: after?.byType['get-logins'],
+      fillsPassword: countEvents(s.events, 'password', 'input'),
+      pass: before?.byType['get-logins'] === 1 && after?.byType['get-logins'] <= 1 + 2 &&
+        countEvents(s.events, 'password', 'input') === 1,
+    };
+  },
+
+  // Item 4: re-detecting fields must not stack event handlers. One click on
+  // the username field must render the dropdown as often after two
+  // "redetect_fields" as on a fresh page (stacked focus/click handlers each
+  // ran the search again).
+  async stacking(driver) {
+    // Counts dropdown items added to the page during one click on username.
+    const rendersOnClick = async () => {
+      await driver.executeScript(function () {
+        window.__acAdded = 0;
+        window.__acObs = new MutationObserver((ms) => {
+          // Check the parent (m.target): a later render may already have removed n.
+          for (const m of ms) for (const n of m.addedNodes) {
+            if (n.nodeType === 1 && n.matches('li') && m.target.closest && m.target.closest('#kphc-ac-menu')) window.__acAdded++;
+          }
+        });
+        window.__acObs.observe(document.body, { childList: true, subtree: true });
+      });
+      await driver.executeScript("document.getElementById('other').focus()");
+      await sleep(300);
+      await driver.findElement(By.id('username')).click();
+      await sleep(1500);
+      await driver.findElement(By.id('username')).sendKeys(Key.ESCAPE);
+      return driver.executeScript('window.__acObs.disconnect(); return window.__acAdded;');
+    };
+    await configure(driver, { autoFillSingleEntry: false });
+    await driver.get(PAGES.replace('{host}', 'single') + '/login.html');
+    await sleep(3000);
+    const fresh = await rendersOnClick();
+    await openExtPage(driver, 'options/options.html');
+    const sent = await driver.executeAsyncScript(function (done) {
+      browser.tabs.query({ url: '*://single.localhost/*' }).then(async (tabs) => {
+        for (let i = 0; i < 2; i++) {
+          await browser.tabs.sendMessage(tabs[0].id, { action: 'redetect_fields' });
+          await new Promise((r) => setTimeout(r, 1500));
+        }
+        done(tabs.length);
+      }, (e) => done(String(e)));
+    });
+    await toWebTab(driver);
+    await sleep(1000);
+    const afterRedetect = await rendersOnClick();
+    return { tabsFound: sent, rendersFresh: fresh, rendersAfterRedetect: afterRedetect,
+      pass: sent === 1 && fresh > 0 && afterRedetect === fresh };
   },
 };
 
