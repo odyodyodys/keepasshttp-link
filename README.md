@@ -44,6 +44,8 @@ It is a modified version of [KeePassHttp-Connector](https://github.com/smorks/ke
 
 ## Requirements
 
+<p align="center"><img src="documentation/images/architecture.svg" width="900" alt="Firefox with the KeePassHttp-Neo extension connects over localhost to KeePass with the KeePassHttp plugin."></p>
+
 | Part | Version |
 |---|---|
 | Firefox (desktop) | 140 or newer |
@@ -60,7 +62,7 @@ Not supported:
 This extension is not published on addons.mozilla.org yet. Install it from the source code.
 
 1. **KeePass plugin**: download `KeePassHttp.plgx` from the [alan-null/keepasshttp releases](https://github.com/alan-null/keepasshttp/releases). Copy it into the `Plugins` folder of KeePass, then restart KeePass.
-2. **Remove the original KeePassHttp-Connector** if it is installed. Both use the same add-on ID.
+2. **Disable the original KeePassHttp-Connector** if it is installed. Both would try to fill the same login fields.
 3. **Load the extension:**
    - Get the code: `git clone https://github.com/odyodyodys/keepasshttp-neo.git`
    - In Firefox, open `about:debugging#/runtime/this-firefox`.

@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="40 72 1120 348" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+<title id="t">How KeePassHttp-Neo fits together</title>
+<desc id="d">Firefox with the KeePassHttp-Neo extension connects over localhost to KeePass with the KeePassHttp plugin.</desc>
+<style>
+.box{fill:#f4f4f5;stroke:#b8b8bf}
+.win{fill:#ffffff;stroke:#b8b8bf}
+.ln{stroke:#b8b8bf}
+.f1{fill:#b8b8bf}.f2{fill:#d8d8de}.f3{fill:#e6e6ea}.f4{fill:#eceef2}
+.ic{stroke:#8a8a94}.icf{fill:#8a8a94}
+.tx{fill:#1f1f23}.mu{fill:#5b5b63}
+.wire{stroke:#5b5b63}.wiref{fill:#5b5b63}
+.bg{fill:#ffffff}
+.tag{fill:#1d4ed8}
+.neo{fill:#1d4ed8;stroke:#1e3a8a}.neotx{fill:#ffffff}.neomu{fill:#dbeafe}
+.plg{fill:#fafafa;stroke:#8a8a94}
+@media (prefers-color-scheme: dark){
+.box{fill:#161b22;stroke:#3d444d}
+.win{fill:#0d1117;stroke:#3d444d}
+.ln{stroke:#3d444d}
+.f1{fill:#3d444d}.f2{fill:#30363d}.f3{fill:#262c34}.f4{fill:#21262d}
+.ic{stroke:#8b949e}.icf{fill:#8b949e}
+.tx{fill:#e6edf3}.mu{fill:#9198a1}
+.wire{stroke:#9198a1}.wiref{fill:#9198a1}
+.bg{fill:#0d1117}
+.tag{fill:#60a5fa}
+.neo{fill:#1d4ed8;stroke:#60a5fa}
+.plg{fill:#161b22;stroke:#8b949e}
+}
+</style>
+<defs>
+<filter id="sh" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#1d4ed8" flood-opacity="0.32"/></filter>
+<marker id="ah" viewBox="0 0 4 4" refX="2" refY="2" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 L4 2 L0 4 Z" class="wiref"/></marker>
+</defs>
+
+<!-- Firefox -->
+<rect class="box" x="64.5" y="96.5" width="359" height="299" rx="24"/>
+<text class="tx" x="88" y="142" font-size="24" font-weight="600">Firefox</text>
+<text class="mu" x="88" y="164" font-size="13">browser, version 140+</text>
+<g transform="translate(88 196)">
+<rect class="win" x="1" y="1" width="210" height="174" rx="12" stroke-width="1.5"/>
+<line class="ln" x1="1" y1="36" x2="211" y2="36" stroke-width="1.5"/>
+<circle class="f1" cx="18" cy="18" r="4"/><circle class="f1" cx="32" cy="18" r="4"/><circle class="f1" cx="46" cy="18" r="4"/>
+<rect class="f4" x="62" y="10" width="134" height="16" rx="8"/>
+<rect class="f2" x="18" y="54" width="110" height="12" rx="6"/>
+<rect class="f3" x="18" y="78" width="176" height="8" rx="4"/>
+<rect class="f3" x="18" y="94" width="150" height="8" rx="4"/>
+<rect class="f3" x="18" y="110" width="164" height="8" rx="4"/>
+<rect class="f4" x="18" y="134" width="88" height="24" rx="6"/>
+</g>
+
+<!-- KeePass -->
+<rect class="box" x="776.5" y="96.5" width="359" height="299" rx="24"/>
+<text class="tx" x="900" y="142" font-size="24" font-weight="600">KeePass</text>
+<text class="mu" x="900" y="164" font-size="13">password manager, version 2.x</text>
+<g transform="translate(900 196)">
+<rect class="win" x="1" y="1" width="210" height="174" rx="12" stroke-width="1.5"/>
+<rect class="f4" x="14" y="14" width="184" height="20" rx="6"/>
+<rect class="f1" x="24" y="20" width="60" height="8" rx="4"/>
+<g fill="none" stroke-width="2"><circle class="ic" cx="26" cy="58" r="7"/><circle class="ic" cx="26" cy="96" r="7"/><circle class="ic" cx="26" cy="134" r="7"/></g>
+<rect class="f2" x="42" y="50" width="70" height="8" rx="4"/><rect class="f3" x="42" y="62" width="110" height="8" rx="4"/>
+<rect class="f2" x="42" y="88" width="84" height="8" rx="4"/><rect class="f3" x="42" y="100" width="96" height="8" rx="4"/>
+<rect class="f2" x="42" y="126" width="62" height="8" rx="4"/><rect class="f3" x="42" y="138" width="120" height="8" rx="4"/>
+<g class="icf"><circle cx="170" cy="58" r="2.5"/><circle cx="179" cy="58" r="2.5"/><circle cx="188" cy="58" r="2.5"/><circle cx="170" cy="96" r="2.5"/><circle cx="179" cy="96" r="2.5"/><circle cx="188" cy="96" r="2.5"/><circle cx="170" cy="134" r="2.5"/><circle cx="179" cy="134" r="2.5"/><circle cx="188" cy="134" r="2.5"/></g>
+</g>
+
+<!-- Connection -->
+<path class="wire" d="M529 246 L671 246" fill="none" stroke-width="2" stroke-linecap="round" marker-start="url(#ah)" marker-end="url(#ah)"/>
+<text class="mu" x="600" y="227" font-size="13" text-anchor="middle">localhost only</text>
+<g transform="translate(588 234)">
+<rect class="bg" width="24" height="24"/>
+<rect class="wire" x="5" y="10" width="14" height="10" rx="2.5" fill="none" stroke-width="2"/>
+<path class="wire" d="M8 10 V7.5 a4 4 0 0 1 8 0 V10" fill="none" stroke-width="2" stroke-linecap="round"/>
+<circle class="wiref" cx="12" cy="15" r="1.5"/>
+</g>
+<text class="mu" x="600" y="271" font-size="13" text-anchor="middle">AES-256 + HMAC</text>
+
+<!-- This project -->
+<text class="tag" x="424" y="186" font-size="12" font-weight="600" letter-spacing="0.5" text-anchor="middle">THIS PROJECT</text>
+<rect class="neo" x="325.5" y="203.5" width="197" height="85" rx="15" stroke-width="3" filter="url(#sh)"/>
+<text class="neotx" x="424" y="242" font-size="17" font-weight="700" text-anchor="middle">KeePassHttp-Neo</text>
+<text class="neomu" x="424" y="263" font-size="13" text-anchor="middle">this extension</text>
+
+<!-- Plugin -->
+<rect class="plg" x="676.75" y="202.75" width="198.5" height="86.5" rx="16" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text class="tx" x="776" y="242" font-size="17" font-weight="700" text-anchor="middle">KeePassHttp plugin</text>
+<text class="mu" x="776" y="263" font-size="13" text-anchor="middle">by alan-null, version 2.3+</text>
+</svg>
