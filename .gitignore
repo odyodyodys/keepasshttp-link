@@ -4,3 +4,4 @@ chromeipass.pem
 /chromeipass-data/
 .idea/
 dist/
+/notes/
