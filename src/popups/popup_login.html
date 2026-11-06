@@ -1,24 +1,22 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 	<head>
-		<title>KeePass - Popup</title>
-		<link rel="stylesheet" href="popup.css" />
-		<link rel="stylesheet" href="../bootstrap-btn.css" />
-		<script type="text/javascript" src="../browser-polyfill.min.js"></script>
-		<script type="text/javascript" src="../jquery-3.7.1.min.js"></script>
-		<script type="text/javascript" src="popup_functions.js"></script>
-		<script type="text/javascript" src="popup_login.js"></script>
+		<meta charset="utf-8">
+		<title>KeePassHttp-Neo</title>
+		<link rel="stylesheet" href="../ui.css">
+		<script src="../browser-polyfill.min.js" defer></script>
+		<script src="popup_functions.js" defer></script>
+		<script src="popup_login.js" defer></script>
 	</head>
-	<body>
+	<body class="popup">
 		<div id="settings" class="settings">
-			<button id="btn-options" class="b2c-btn b2c-btn-small b2c-btn-warning">Settings</button>
-			<button id="btn-choose-credential-fields" class="b2c-btn b2c-btn-small">Choose own credential fields for this page</button>
+			<button id="btn-options" type="button" class="small">Settings</button>
+			<button id="btn-choose-credential-fields" type="button" class="small">Choose own credential fields for this page</button>
 		</div>
 
 		<div class="credentials">
-			<p>
-				Select the login information you would like to get entered into the page:
-			</p>
-			<ul id="login-list"></ul>
+			<p>Select the login you want to fill into the page:</p>
+			<ul id="login-list" class="logins"></ul>
 		</div>
 	</body>
 </html>

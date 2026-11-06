@@ -1,33 +1,30 @@
-$(function () {
-	browser.runtime.getBackgroundPage().then(function (global) {
-		browser.tabs.query({ "active": true, "currentWindow": true }).then(function (tabs) {
-			//var data = global.tab_httpauth_list["tab" + tab.id];
-			var tab = tabs[0];
-			var data = global.page.tabs[tab.id].loginList;
-			var ul = document.getElementById("login-list");
-			if (!/^https:/i.test(String(data.url || ""))) {
-				document.getElementById("insecure-warning").hidden = false;
-			}
-			for (var i = 0; i < data.logins.length; i++) {
-				var li = document.createElement("li");
-				var a = document.createElement("a");
-				a.textContent = data.logins[i].Login + " (" + data.logins[i].Name + ")";
-				li.appendChild(a);
-				$(a).data('creds', data.logins[i]);
-				$(a).click(function () {
-					if (data.resolve) {
-						var creds = $(this).data('creds');
-						data.resolve({
-							authCredentials: {
-								username: creds.Login,
-								password: creds.Password
-							}
-						});
-					}
-					close();
-				});
-				ul.appendChild(li);
-			}
+browser.runtime.getBackgroundPage().then(function(global) {
+	browser.tabs.query({ "active": true, "currentWindow": true }).then(function(tabs) {
+		var tab = tabs[0];
+		var data = global.page.tabs[tab.id].loginList;
+		var ul = document.getElementById("login-list");
+		if (!/^https:/i.test(String(data.url || ""))) {
+			document.getElementById("insecure-warning").hidden = false;
+		}
+		data.logins.forEach(function(creds) {
+			var li = document.createElement("li");
+			var a = document.createElement("a");
+			a.href = "#";
+			a.textContent = creds.Login + " (" + creds.Name + ")";
+			a.addEventListener("click", function(e) {
+				e.preventDefault();
+				if (data.resolve) {
+					data.resolve({
+						authCredentials: {
+							username: creds.Login,
+							password: creds.Password
+						}
+					});
+				}
+				close();
+			});
+			li.appendChild(a);
+			ul.appendChild(li);
 		});
 	});
 });

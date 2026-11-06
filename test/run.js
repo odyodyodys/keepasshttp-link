@@ -75,6 +75,8 @@ async function startFirefox() {
     .setPreference('signon.rememberSignons', process.env.FF_PWMGR === '1')
     .setPreference('signon.autofillForms', process.env.FF_PWMGR === '1')
     .setPreference('browser.shell.checkDefaultBrowser', false)
+    // DARK=1: pages see prefers-color-scheme: dark (for visual checks with SHOTS=1).
+    .setPreference('layout.css.prefers-color-scheme.content-override', process.env.DARK === '1' ? 0 : 1)
     .setPreference('datareporting.policy.dataSubmissionEnabled', false)
     .setPreference('app.update.auto', false)
     .setAcceptInsecureCerts(true); // self-signed test certificate (test profile only)
@@ -922,6 +924,7 @@ scenarios.options = async function (driver) {
       latestVersion: document.querySelectorAll('.latestVersion, .checkUpdateKeePassHttp').length,
     };
   });
+  if (process.env.SHOTS) writeFileSync(path.join(ART, 'options-general.png'), await driver.takeScreenshot(), 'base64');
   await toWebTab(driver);
   r.pass = /^\d+(\.\d+)+$/.test(r.yourVersion || '') && r.updateRadios === 0 && r.latestVersion === 0;
   return r;
@@ -943,6 +946,7 @@ scenarios.smallbugs = async function (driver) {
       identifierText: document.getElementById('associated-identifier').textContent,
     };
   });
+  if (process.env.SHOTS) writeFileSync(path.join(ART, 'popup-main.png'), await driver.takeScreenshot(), 'base64');
   await openExtPage(driver, 'options/options.html');
   await sleep(1000);
   out.blink = await driver.executeAsyncScript(function (done) {
@@ -1302,6 +1306,39 @@ scenarios.toolbar = async function (driver) {
   return { withLogins: withLogins.popup, locked: locked.popup, iconsDiffer, invalidShown,
     afterInvalid, afterCustom, customIconDiffers: customIcon !== withLogins.icon, afterSwatch,
     pass: withLogins.popup === 'popup_login.html' && locked.popup === 'popup.html' && iconsDiffer && colorOk };
+};
+
+// Settings page: "Remove" asks in a native <dialog>; Cancel keeps the row,
+// "Yes, remove now" deletes it from the table and from storage.
+scenarios.dialogs = async function (driver) {
+  const url = 'https://dialog-test.localhost';
+  await configure(driver, { 'defined-credential-fields': { [url]: { username: 'u', password: 'p', fields: [] } } });
+  await openExtPage(driver, 'options/options.html');
+  await driver.findElement(By.css('a[href="#specified-fields"]')).click();
+  await sleep(300);
+  const rowCount = async () => (await driver.findElements(By.css('#tab-specified-fields tbody tr[id^="tr-scf"]'))).length;
+  const stored = async () => driver.executeAsyncScript(function (u, done) {
+    browser.storage.local.get({ settings: {} }).then((it) => done(u in (it.settings['defined-credential-fields'] || {})));
+  }, url);
+  const rows0 = await rowCount();
+  const openDialog = async () => {
+    await driver.findElement(By.css('#tab-specified-fields tbody tr[id^="tr-scf"] button.delete')).click();
+    await sleep(300);
+    return driver.executeScript("const d = document.getElementById('dialogDeleteSpecifiedCredentialFields'); return { open: d.open, name: d.querySelector('.name').textContent }");
+  };
+  const d1 = await openDialog();
+  await driver.findElement(By.css('#dialogDeleteSpecifiedCredentialFields button[value=cancel]')).click();
+  await sleep(300);
+  const afterCancel = { rows: await rowCount(), stored: await stored() };
+  const d2 = await openDialog();
+  await driver.findElement(By.css('#dialogDeleteSpecifiedCredentialFields button[value=yes]')).click();
+  await sleep(500);
+  const afterYes = { rows: await rowCount(), stored: await stored(),
+    emptyShown: await driver.findElement(By.css('#tab-specified-fields tr.empty')).isDisplayed() };
+  await toWebTab(driver);
+  return { rows0, d1, afterCancel, d2, afterYes,
+    pass: rows0 === 1 && d1.open && d1.name === url && afterCancel.rows === 1 && afterCancel.stored &&
+      d2.open && afterYes.rows === 0 && !afterYes.stored && afterYes.emptyShown };
 };
 
 // ---------- main ----------

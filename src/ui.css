@@ -1,0 +1,382 @@
+/* Shared styles for the toolbar popups and the settings page.
+   Plain CSS: custom properties, native nesting, light-dark(). No library, no build. */
+
+:root {
+	color-scheme: light dark;
+	--bg: light-dark(#f9f9fb, #1c1b22);
+	--surface: light-dark(#ffffff, #2b2a33);
+	--text: light-dark(#1f1f23, #fbfbfe);
+	--muted: light-dark(#5b5b66, #b0b0bb);
+	--border: light-dark(#d0d0d7, #52525e);
+	--hover: light-dark(#eef0f4, #3a3944);
+	--accent: light-dark(#1d4ed8, #60a5fa);
+	--danger: light-dark(#b91c1c, #f87171);
+	--danger-bg: light-dark(#fef2f2, #3b1d1d);
+	--success: light-dark(#15803d, #4ade80);
+	--radius: 6px;
+	font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+	background: var(--bg);
+	color: var(--text);
+}
+
+body {
+	margin: 0;
+}
+
+a {
+	color: var(--accent);
+}
+
+code {
+	font-family: ui-monospace, Consolas, monospace;
+	font-size: 0.9em;
+	padding: 1px 4px;
+	border-radius: 4px;
+	background: var(--hover);
+	overflow-wrap: anywhere;
+}
+
+[hidden] {
+	display: none !important;
+}
+
+/* ---------- buttons ---------- */
+
+button,
+.btn {
+	font: inherit;
+	padding: 5px 12px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--surface);
+	color: var(--text);
+	cursor: pointer;
+
+	&:hover:not(:disabled) {
+		background: var(--hover);
+	}
+	&:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+	&:disabled {
+		opacity: 0.5;
+		cursor: default;
+	}
+	&.primary,
+	&.success,
+	&.danger {
+		color: #ffffff;
+		border-color: transparent;
+	}
+	&.primary { background: #1d4ed8; }
+	&.success { background: #15803d; }
+	&.danger { background: #b91c1c; }
+	&.primary:hover:not(:disabled),
+	&.success:hover:not(:disabled),
+	&.danger:hover:not(:disabled) {
+		filter: brightness(1.12);
+	}
+	&.small {
+		padding: 2px 8px;
+		font-size: 0.9em;
+	}
+}
+
+/* ---------- forms ---------- */
+
+input[type=text],
+input[type=number] {
+	font: inherit;
+	padding: 4px 8px;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--surface);
+	color: var(--text);
+}
+
+.field {
+	margin: 16px 0;
+
+	& label {
+		display: block;
+		font-weight: 600;
+		margin-bottom: 4px;
+	}
+	& .row {
+		display: flex;
+		gap: 8px;
+		align-items: center;
+	}
+	& input[type=number] {
+		width: 120px;
+	}
+	&.error input {
+		border-color: var(--danger);
+		background: var(--danger-bg);
+	}
+	&.success input {
+		border-color: var(--success);
+	}
+	& .status {
+		font-size: 0.9em;
+	}
+	&.error .status {
+		color: var(--danger);
+	}
+}
+
+.check {
+	margin: 16px 0;
+
+	& label {
+		font-weight: 600;
+		display: flex;
+		gap: 8px;
+		align-items: baseline;
+	}
+}
+
+.help {
+	display: block;
+	color: var(--muted);
+	font-size: 0.92em;
+	margin-top: 2px;
+}
+
+/* ---------- tables ---------- */
+
+table {
+	width: 100%;
+	border-collapse: collapse;
+	background: var(--surface);
+	border: 1px solid var(--border);
+
+	& th,
+	& td {
+		text-align: left;
+		vertical-align: top;
+		padding: 8px;
+		border-bottom: 1px solid var(--border);
+	}
+	& th {
+		font-weight: 600;
+	}
+	& tbody tr:hover {
+		background: var(--hover);
+	}
+	& td.nowrap {
+		white-space: nowrap;
+	}
+}
+
+/* ---------- dialogs ---------- */
+
+dialog {
+	max-width: 460px;
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	padding: 20px;
+	background: var(--surface);
+	color: var(--text);
+
+	&::backdrop {
+		background: rgb(0 0 0 / 0.4);
+	}
+	& h3 {
+		margin-top: 0;
+	}
+	& .actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 8px;
+		margin-top: 16px;
+	}
+}
+
+/* ---------- messages ---------- */
+
+.alert {
+	padding: 10px 12px;
+	border-radius: var(--radius);
+	border: 1px solid var(--danger);
+	background: var(--danger-bg);
+}
+
+/* ---------- toolbar popups ---------- */
+
+body.popup {
+	min-width: 360px;
+	max-width: 480px;
+	padding: 12px;
+	overflow-x: hidden;
+
+	& .settings {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		padding-bottom: 10px;
+		margin-bottom: 10px;
+		border-bottom: 1px solid var(--border);
+	}
+	& .actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 8px;
+	}
+	& .meta {
+		color: var(--muted);
+		font-size: 0.9em;
+
+		& span span {
+			color: var(--text);
+		}
+	}
+}
+
+/* Clickable login lists in the popups. */
+ul.logins {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+
+	& li {
+		margin: 0;
+	}
+	& a {
+		display: block;
+		padding: 4px 10px;
+		border-radius: var(--radius);
+		color: var(--text);
+		text-decoration: none;
+		cursor: pointer;
+	}
+	& a:hover,
+	& a:focus-visible {
+		background: var(--hover);
+	}
+	& a.match {
+		font-weight: 700;
+	}
+}
+
+/* ---------- settings page ---------- */
+
+body.options {
+	padding: 24px 16px 60px;
+
+	& .container {
+		max-width: 1000px;
+		margin: 0 auto;
+	}
+	& header {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+
+		& h1 {
+			font-size: 1.6em;
+			font-weight: 500;
+			margin: 0;
+		}
+	}
+	& nav {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+		margin: 20px 0;
+		padding: 4px;
+		border-radius: 10px;
+		background: var(--surface);
+		border: 1px solid var(--border);
+
+		& a {
+			flex: 1;
+			text-align: center;
+			padding: 8px 12px;
+			border-radius: var(--radius);
+			text-decoration: none;
+		}
+		& a[aria-selected=true] {
+			background: #1d4ed8;
+			color: #ffffff;
+		}
+	}
+	& h2 {
+		font-weight: 500;
+		border-bottom: 1px solid var(--border);
+		padding-bottom: 8px;
+	}
+	& hr {
+		border: 0;
+		border-top: 1px solid var(--border);
+		margin: 20px 0;
+	}
+	& details > summary {
+		cursor: pointer;
+		font-weight: 600;
+		margin: 12px 0;
+	}
+	& dl.versions {
+		display: grid;
+		grid-template-columns: max-content 1fr;
+		gap: 4px 16px;
+
+		& dd {
+			margin: 0;
+		}
+	}
+	& footer {
+		color: var(--muted);
+		font-size: 0.9em;
+		margin-top: 40px;
+	}
+}
+
+/* Icon color picker (settings, Connected Databases). */
+.kph-color {
+	min-width: 210px;
+}
+.kph-previews {
+	display: flex;
+	gap: 6px;
+	margin-bottom: 6px;
+}
+.kph-chip {
+	display: inline-flex;
+	padding: 4px;
+	border-radius: var(--radius);
+	border: 1px solid var(--border);
+
+	& canvas {
+		width: 16px;
+		height: 16px;
+	}
+}
+.kph-swatches {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin-bottom: 6px;
+}
+button.kph-swatch {
+	width: 18px;
+	height: 18px;
+	padding: 0;
+	border: 2px solid transparent;
+	border-radius: 4px;
+
+	&.kph-selected {
+		border-color: var(--text);
+		box-shadow: 0 0 0 1px var(--surface) inset;
+	}
+}
+input.kph-hex {
+	width: 90px;
+	font-family: ui-monospace, Consolas, monospace;
+
+	&.kph-invalid {
+		border-color: var(--danger);
+		background: var(--danger-bg);
+	}
+}

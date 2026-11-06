@@ -1,392 +1,248 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<title>Settings | KeePassHttp-Neo</title>
-		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-		<link href="bootstrap.min.css" rel="stylesheet" />
-		<link rel="stylesheet" href="../bootstrap-btn.css" />
-		<link href="bootstrap-theme.min.css" rel="stylesheet" />
-		<style>
-			.kph-color { min-width: 210px; }
-			.kph-previews { display: flex; gap: 6px; margin-bottom: 6px; }
-			.kph-chip { display: inline-flex; padding: 4px; border-radius: 6px; border: 1px solid #ccc; }
-			.kph-chip canvas { width: 16px; height: 16px; }
-			.kph-swatches { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
-			.kph-swatch { width: 18px; height: 18px; padding: 0; border: 2px solid transparent; border-radius: 4px; cursor: pointer; }
-			.kph-swatch.kph-selected { border-color: #000; box-shadow: 0 0 0 1px #fff inset; }
-			.kph-hex { width: 80px; font-family: monospace; }
-			.kph-hex.kph-invalid { border-color: #b00020; background: #fff0f2; }
-		</style>
-		<script type="text/javascript" src="../browser-polyfill.min.js"></script>
-		<script type="text/javascript" src="../jquery-3.7.1.min.js"></script>
-		<script type="text/javascript" src="bootstrap.min.js"></script>
-		<script type="text/javascript" src="../background/icon.js"></script>
-		<script type="text/javascript" src="options.js"></script>
-		<style type="text/css">
-			body {
-				padding-top: 20px;
-				padding-bottom: 60px;
-			}
-
-			/* Custom container */
-			.container {
-				margin: 0 auto;
-				max-width: 1000px;
-			}
-			.container > hr {
-				margin: 30px 0;
-			}
-
-			.tab {
-				display: none;
-			}
-			h2+hr {
-				margin-top: 0;
-			}
-
-			#tab-connected-databases .color.dropdown .dropdown-menu {
-				width: 180px;
-				padding: 7px 10px;
-				line-height: 175%;
-			}
-			#tab-connected-databases .color.dropdown .dropdown-menu a {
-				margin-right: 3px;
-			}
-			#tab-connected-databases .color.dropdown a.dropdown-toggle img {
-				margin-right: 5px;
-			}
-			tr.clone {
-				display: none;
-			}
-			td.last-used,
-			td.created {
-				white-space: nowrap;
-			}
-			.bold {
-				font-weight: bold;
-			}
-			.radio.inline,
-			.checkbox.inline {
-				display: inline-block;
-				white-space: nowrap;
-			}
-			.radio.inline + .radio.inline,
-			.checkbox.inline + .checkbox.inline {
-				margin-left: 40px;
-			}
-
-
-			#dangerousSettings {
-				display: none;
-			}
-		</style>
+		<link rel="stylesheet" href="../ui.css">
+		<script src="../browser-polyfill.min.js" defer></script>
+		<script src="../background/icon.js" defer></script>
+		<script src="options.js" defer></script>
 	</head>
-	<body>
+	<body class="options">
 		<div class="container">
-			<div class="masthead">
-				<h3 class="muted"><img src="/icons/icon.svg" width="48" height="48" alt="" /> KeePassHttp-Neo</h3>
-				<div class="navbar">
-					<div class="navbar-inner">
-						<div class="container">
-							<ul class="nav nav-pills nav-justified">
-								<li class="active"><a href="#general-settings">General</a></li>
-								<li><a href="#connected-databases">Connected Databases</a></li>
-								<li><a href="#specified-fields">Specified credential fields</a></li>
-								<li><a href="#about">About</a></li>
-							</ul>
-						</div>
-					</div>
-				</div><!-- /.navbar -->
-			</div>
+			<header>
+				<img src="/icons/icon.svg" width="48" height="48" alt="">
+				<h1>KeePassHttp-Neo</h1>
+			</header>
 
-			<!-- General Settings -->
-			<div class="tab" id="tab-general-settings">
+			<nav role="tablist" aria-label="Settings sections">
+				<a href="#general-settings" role="tab" aria-selected="true">General</a>
+				<a href="#connected-databases" role="tab" aria-selected="false">Connected Databases</a>
+				<a href="#specified-fields" role="tab" aria-selected="false">Specified credential fields</a>
+				<a href="#about" role="tab" aria-selected="false">About</a>
+			</nav>
+
+			<!-- General -->
+			<section class="tab" id="tab-general-settings" role="tabpanel">
 				<h2>General Settings</h2>
-				<hr />
 				<p>
-					If you just want to insert username + password into the fields where your focus is, press <code>Ctrl + Shift + U</code>.
-					<br />
-					If you only want to insert the password, just press <code>Alt + Shift + P</code>. You can customize these shortcuts on <code>chrome://extensions/configureCommands</code> page.
+					To fill username and password into the focused form, press <code>Alt + Shift + U</code>.
+					To fill only the password, press <code>Alt + Shift + P</code>.
+					You can change these shortcuts in <code>about:addons</code> → gear icon → <em>Manage Extension Shortcuts</em>.
 				</p>
-				<p>
-					<label for="blinkTimeout">Blink Time:</label>
-					<div class="control-group">
-					<div class="input-append">
-						<input type="number" id="blinkTimeout" placeholder="7500" value="7500" />
-						<button class="btn" id="blinkTimeoutButton" type="button">Save</button>
-					</div>
-					<span class="help-inline">
-						What is the maximum time (ms) the icon should blink after detecting new credentials
-						<br />
-						Default: 7500
-					</span>
-					</div>
-					</p>
-					<p>
-					<label for="blinkMinTimeout">Redirect Offset:</label>
-					<div class="control-group">
-					<div class="input-append">
-						<input type="number" id="blinkMinTimeout" placeholder="2000" value="2000" />
-						<button class="btn" id="blinkMinTimeoutButton" type="button">Save</button>
-					</div>
-					<span class="help-inline">
-						What is the minimum time (ms) the icon should blink before deactivating due to page redirects.
-						<br />
-						-1 to only use <i>Blink Time</i> ignoring Redirect Allowance (old behavior)
-						<br />
-						Default: -1, Recommended: 2000
-					</span>
-					</div>
-					</p>
-					<p>
-					<label for="allowedRedirect">Redirect Allowance:</label>
-					<div class="control-group">
-					<div class="input-append">
-						<input type="number" id="allowedRedirect" placeholder="1" value="1" />
-						<button class="btn" id="allowedRedirectButton" type="button">Save</button>
-					</div>
-					<span class="help-inline">
-						How many pages should the tab cycle through after the redirect offset before deactivating the icon
-						<br />
-						Default: 1
-					</span>
-					</div>
-				</p>
-				<hr />
-				<p>
-					<label class="checkbox">
-						<input type="checkbox" name="usePasswordGenerator"/> Activate password generator.
-					</label>
-					<span class="help-block">For all password-fields there will be an icon added to generate a new password.<br />
-						It is generated by KeePass with the profile for automatically generated passwords for new entries.</span>
-				</p>
-				<hr />
-				<p>
-					<label class="checkbox">
-						<input type="checkbox" name="autoRetrieveCredentials"/> Automatically retrieve credentials.
-					</label>
-					<span class="help-block">KeePassHttp-Neo will immediately retrieve the credentials when the tab is activated.</span>
-				</p>
-				<hr />
-				<p>
-					<label class="checkbox">
-						<input type="checkbox" name="autoFillSingleEntry"/> Automatically fill-in single credentials entry.
-					</label>
-					<span class="help-block">If KeePassHttp-Neo does only receive a single entry from KeePassHttp it automatically fills this credentials into the found credential fields.</span>
-				</p>
-				<hr />
-				<p>
-					<label class="checkbox">
-						<input type="checkbox" name="autoCompleteUsernames"/> Activate autocomplete for username fields.
-					</label>
-					<span class="help-block">For all username fields on a page a dropdown list appears which contains all available credentials.</span>
-				</p>
-				<hr />
-				<div class="help-block kphVersion">
-					KeePassHttp-Neo needs the plugin KeePassHttp to retrieve credentials from and send them to KeePass.
-					<br />
-					This version is tested with KeePassHttp 2.3.1.0 from <a target="_blank" rel="noopener noreferrer" href="https://github.com/alan-null/keepasshttp">https://github.com/alan-null/keepasshttp</a>
-					<br />
-					<br />
+
+				<div class="field">
+					<label for="blinkTimeout">Blink Time</label>
 					<div class="row">
-						<div class="span3">Your version of KeePassHttp:</div>
-						<div class="span6"><em class="yourVersion"></em></div>
+						<input type="number" id="blinkTimeout" placeholder="7500" value="7500">
+						<button id="blinkTimeoutButton" type="button">Save</button>
+						<span class="status" aria-live="polite"></span>
 					</div>
+					<span class="help">The maximum time (ms) the icon blinks after new credentials are detected. Default: 7500</span>
 				</div>
-				<hr />
-				<p id="http-auth-options">
-					<label class="checkbox">
-						<input type="checkbox" name="autoFillAndSend"/> Auto fill HTTP Auth dialogs and send them.
-					</label>
-					<span class="help-block">
-						If credentials are found for a page and the login-type is an HTTP Auth request, KeePassHttp-Neo tries to login with the first given credentials.
-						<br />
-						An HTTP Auth dialog looks like this:
-					</span>
-					<img src="/options/http-auth-dialog.png" alt="http-auth-dialog" />
-				</p>
-				<hr />
-				<div class="alert alert-error">
-					<strong>Attention!</strong> Please change the following settings only if you know what you are doing!
+
+				<div class="field">
+					<label for="blinkMinTimeout">Redirect Offset</label>
+					<div class="row">
+						<input type="number" id="blinkMinTimeout" placeholder="2000" value="2000">
+						<button id="blinkMinTimeoutButton" type="button">Save</button>
+						<span class="status" aria-live="polite"></span>
+					</div>
+					<span class="help">The minimum time (ms) the icon blinks before page redirects stop it.
+						-1 uses only <em>Blink Time</em> and ignores Redirect Allowance (old behavior). Default: -1, recommended: 2000</span>
 				</div>
-				<button id="showDangerousSettings" class="btn btn-danger" style="width: 203px; height: 30px;" >Show these settings anyway</button>
-				<div id="dangerousSettings">
-				<br />
+
+				<div class="field">
+					<label for="allowedRedirect">Redirect Allowance</label>
+					<div class="row">
+						<input type="number" id="allowedRedirect" placeholder="1" value="1">
+						<button id="allowedRedirectButton" type="button">Save</button>
+						<span class="status" aria-live="polite"></span>
+					</div>
+					<span class="help">How many pages the tab can go through after the redirect offset before the icon stops blinking. Default: 1</span>
+				</div>
+
+				<hr>
+
+				<div class="check">
+					<label><input type="checkbox" name="usePasswordGenerator"> Activate password generator</label>
+					<span class="help">Adds an icon to every password field to generate a new password.
+						KeePass generates it with its profile for new entries.</span>
+				</div>
+				<div class="check">
+					<label><input type="checkbox" name="autoRetrieveCredentials"> Automatically retrieve credentials</label>
+					<span class="help">Ask KeePass for the logins of a page as soon as the tab is active.</span>
+				</div>
+				<div class="check">
+					<label><input type="checkbox" name="autoFillSingleEntry"> Automatically fill in a single credentials entry</label>
+					<span class="help">When KeePass returns exactly one login, fill it into the detected fields without asking.</span>
+				</div>
+				<div class="check">
+					<label><input type="checkbox" name="autoCompleteUsernames"> Activate autocomplete for username fields</label>
+					<span class="help">Show a list of the available logins under every username field.</span>
+				</div>
+
+				<hr>
+
+				<div class="help kphVersion">
+					KeePassHttp-Neo needs the KeePassHttp plugin in KeePass. It is tested with KeePassHttp 2.3.1.0 from
+					<a target="_blank" rel="noopener noreferrer" href="https://github.com/alan-null/keepasshttp">github.com/alan-null/keepasshttp</a>.
+					<dl class="versions">
+						<dt>Your version of KeePassHttp:</dt>
+						<dd><em class="yourVersion"></em></dd>
+					</dl>
+				</div>
+
+				<hr>
+
+				<div class="check" id="http-auth-options">
+					<label><input type="checkbox" name="autoFillAndSend"> Auto fill HTTP Auth dialogs and send them</label>
+					<span class="help">When a page asks for HTTP Basic Auth (the browser's own login dialog, below), log in with the first login found.
+						This happens only on https pages; on http pages you choose the login yourself.</span>
+					<img src="/options/http-auth-dialog.png" alt="Example of an HTTP Auth dialog">
+				</div>
+
+				<hr>
+
+				<details id="dangerousSettings">
+					<summary>Advanced settings</summary>
+					<p class="alert"><strong>Attention!</strong> Change these settings only if you know what you are doing.</p>
 					<p>
-						KeePassHttp-Neo communicates on <em>http://localhost:[port]</em> with KeePassHTTP.
-						<br />
-						KeePass must run on this computer. Remote KeePass hosts are not supported, because the connection is plain HTTP.
-						<br />
-						Sometimes the default port is still in use and you have to change the port number in KeePassHTTP to get it running. So you have to set the same port number in KeePassHttp-Neo and KeePassHTTP.
+						KeePassHttp-Neo talks to KeePassHttp on <code>http://localhost:[port]</code>.
+						KeePass must run on this computer: remote KeePass hosts are not supported, because the connection is plain HTTP.
+						If the default port is in use, change it in the KeePassHttp options and set the same port here.
 					</p>
-					<p>
-						<label for="port">Port:</label>
-						<div class="control-group">
-							<div class="input-append">
-								<input type="number" id="port" min="1025" max="65535" placeholder="19455" value="19455" />
-								<button class="btn" id="portButton" type="button">Save</button>
-							</div>
-							<span class="help-inline">
-								Change the port if you have trouble with running KeePassHTTP on the default port.
-								<br />
-								You have to set the same port number in KeePassHTTP options!
-								<br />
-								Default: 19455
-							</span>
+					<div class="field">
+						<label for="port">Port</label>
+						<div class="row">
+							<input type="number" id="port" min="1025" max="65535" placeholder="19455" value="19455">
+							<button id="portButton" type="button">Save</button>
+							<span class="status" aria-live="polite"></span>
 						</div>
-					</p>
-					<p>
-						<label class="checkbox">
-							<input type="checkbox" name="supressAlerts"/> Supress warnings and errors via alert.
-						</label>
-						<span class="help-block">Disables communicating errors and warnings via JavaScript alert.</span>
-					</p>
-					<p>
-						<label class="checkbox">
-							<input type="checkbox" name="respectMaxLength"/> Respect maxlength="" attribute on inputs.
-						</label>
-						<span class="help-block">Limit the field filled in to the maximum number of characters allowed by
-							maxlength="" in the input as set by the website admin?<br />
-							There is a possibility of this causing issues with sites that have decreased this value after
-							you have already created one, or have increased it before the fact and the password stored in keepass itself is longer than maxlength.
-						</span>
-					</p>
-				</div>
-			</div>
+						<span class="help">Must be the same as in the KeePassHttp options. Range 1025 to 65535. Default: 19455</span>
+					</div>
+					<div class="check">
+						<label><input type="checkbox" name="supressAlerts"> Supress warnings and errors via alert</label>
+						<span class="help">Do not show warnings and errors as page alerts.</span>
+					</div>
+					<div class="check">
+						<label><input type="checkbox" name="respectMaxLength"> Respect the maxlength attribute of fields</label>
+						<span class="help">Cut filled values to the maximum length the page allows.
+							This can cause problems when a site lowers the limit after you created a password, or when the password in KeePass is longer than the limit.</span>
+					</div>
+				</details>
+			</section>
 
 			<!-- Connected Databases -->
-			<div class="tab" id="tab-connected-databases">
+			<section class="tab" id="tab-connected-databases" role="tabpanel" hidden>
 				<h2>Connected Databases</h2>
-				<hr />
-				<p>
-					If you are using several KeePass databases you can define a specific icon-color to each of them.
-					<br />
-					This will help you to easily determine from which database the credentials are retrieved.
-				</p>
-				<table class="table table-striped table-bordered table-hover">
+				<p>If you use several KeePass databases, give each one its own toolbar icon color. Then you see at a glance which database the logins come from.</p>
+				<table>
 					<thead>
 						<tr>
-							<th class="span5">Identifier</th>
-							<th class="span2">Icon color</th>
-							<th class="span2">Last used</th>
-							<th class="span2">Created</th>
-							<th class="span1">Delete</th>
+							<th>Identifier</th>
+							<th>Icon color</th>
+							<th>Last used</th>
+							<th>Created</th>
+							<th>Delete</th>
 						</tr>
 					</thead>
 					<tbody>
 						<tr class="empty">
 							<td colspan="5">No connected databases found.</td>
 						</tr>
-						<tr class="clone">
-							<td></td>
-							<td>
-								<div class="kph-color"></div>
-							</td>
-							<td class="last-used"></td>
-							<td class="created"></td>
-							<td><button class="btn delete btn-danger">Remove</button></td>
-						</tr>
 					</tbody>
 				</table>
-				<div style="text-align: right">
-					<button id="connect-button" class="b2c-btn b2c-btn-primary">Connect</button>
-					</div>
-				<div id="dialogDeleteConnectedDatabase" class="modal" style="display:none;" tabindex="-1" role="dialog">
-					<div class="modal-dialog" role="document">
-						<div class="modal-content">
-							<div class="modal-header">
-								<button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
-								<h3 id="myModalLabel">Remove identifier from browser?</h3>
-							</div>
-							<div class="modal-body">
-								<p>Do you really want to remove the identifier <span class="bold"></span> from browser?</p>
-								<p class="help-block">You can reconnect your database at any time.</p>
-							</div>
-							<div class="modal-footer">
-								<button class="btn" data-dismiss="modal" aria-hidden="true">Cancel</button>
-								<button class="btn yes btn-primary">Yes, remove now</button>
-							</div>
+				<template id="row-connected-database">
+					<tr>
+						<td class="identifier"></td>
+						<td><div class="kph-color"></div></td>
+						<td class="last-used nowrap"></td>
+						<td class="created nowrap"></td>
+						<td><button type="button" class="delete danger">Remove</button></td>
+					</tr>
+				</template>
+				<p class="actions" style="text-align: right">
+					<button id="connect-button" type="button" class="primary">Connect</button>
+				</p>
+				<dialog id="dialogDeleteConnectedDatabase" aria-labelledby="dialogDeleteConnectedDatabaseTitle">
+					<form method="dialog">
+						<h3 id="dialogDeleteConnectedDatabaseTitle">Remove identifier from browser?</h3>
+						<p>Do you really want to remove the identifier <strong class="name"></strong> from this browser?</p>
+						<p class="help">You can connect your database again at any time.</p>
+						<div class="actions">
+							<button value="cancel">Cancel</button>
+							<button value="yes" class="primary">Yes, remove now</button>
 						</div>
-					</div>
-				</div>
-			</div>
+					</form>
+				</dialog>
+			</section>
 
 			<!-- Specified credential fields -->
-			<div class="tab" id="tab-specified-fields">
+			<section class="tab" id="tab-specified-fields" role="tabpanel" hidden>
 				<h2>Specified credential fields</h2>
-				<hr />
 				<p>
-					If KeePassHttp-Neo detects the wrong credential fields, you are able to specify the correct fields by yourself.
-					<br />
-					Just go to the page and click on the KeePassHttp-Neo-Icon, now select <em>Choose own credential fields for this page</em>.
-					<br />
-					On this page you can manage theses specified credential fields.
+					If KeePassHttp-Neo detects the wrong fields on a page, you can choose them yourself:
+					open the page, click the KeePassHttp-Neo toolbar icon, then <em>Choose own credential fields for this page</em>.
+					Here you can remove these choices.
 				</p>
-				<table class="table table-striped table-bordered table-hover">
+				<table>
 					<thead>
 						<tr>
-							<th class="span10">Page URL</th>
-							<th class="span2">Delete</th>
+							<th>Page URL</th>
+							<th>Delete</th>
 						</tr>
 					</thead>
 					<tbody>
 						<tr class="empty">
 							<td colspan="2">No specified credential fields found.</td>
 						</tr>
-						<tr class="clone">
-							<td></td>
-							<td><button class="btn delete btn-danger btn">Remove</button></td>
-						</tr>
 					</tbody>
 				</table>
-				<div id="dialogDeleteSpecifiedCredentialFields" class="modal" style="display:none;" tabindex="-1" role="dialog">
-					<div class="modal-dialog" role="document">
-						<div class="modal-content">
-							<div class="modal-header">
-								<button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
-								<h3 id="myModalLabel">Remove specified credential fields?</h3>
-							</div>
-							<div class="modal-body">
-								<p>Do you really want to remove the specified credential fields on the page <strong></strong>?</p>
-								<p class="help-block">KeePassHttp-Neo will automatically detect the credential fields the next time you visit this page.</p>
-							</div>
-							<div class="modal-footer">
-								<button class="btn" data-dismiss="modal" aria-hidden="true">Cancel</button>
-								<button class="btn yes btn-primary">Yes, remove now</button>
-							</div>
+				<template id="row-specified-fields">
+					<tr>
+						<td class="url"></td>
+						<td><button type="button" class="delete danger">Remove</button></td>
+					</tr>
+				</template>
+				<dialog id="dialogDeleteSpecifiedCredentialFields" aria-labelledby="dialogDeleteSpecifiedCredentialFieldsTitle">
+					<form method="dialog">
+						<h3 id="dialogDeleteSpecifiedCredentialFieldsTitle">Remove specified credential fields?</h3>
+						<p>Do you really want to remove the specified credential fields for <strong class="name"></strong>?</p>
+						<p class="help">KeePassHttp-Neo will detect the fields automatically the next time you open this page.</p>
+						<div class="actions">
+							<button value="cancel">Cancel</button>
+							<button value="yes" class="primary">Yes, remove now</button>
 						</div>
-					</div>
-				</div>
-			</div>
+					</form>
+				</dialog>
+			</section>
 
 			<!-- About -->
-			<div class="tab" id="tab-about">
+			<section class="tab" id="tab-about" role="tabpanel" hidden>
 				<h2>About</h2>
-				<hr />
 				<p>
-					Developed by <a target="_blank" href="https://github.com/pfn/">Perry Nguyen</a> and <a target="_blank" href="http://lukas-schulze.de">Lukas Schulze</a>.<br />
-					WebExtension (Firefox) compatibility by <a target="_blank" href="https://github.com/projectgus">Angus Gratton</a> and <a target="_blank" href="https://github.com/smorks">Andy Brandt</a>.
+					KeePassHttp-Neo is a modified version of
+					<a target="_blank" rel="noopener noreferrer" href="https://github.com/smorks/keepasshttp-connector">KeePassHttp-Connector</a>
+					by Andy Brandt (smorks), based on chromeIPass and PassIFox by Perry Nguyen and Lukas Schulze,
+					with WebExtension work by Angus Gratton. License: GNU GPL v3.
 				</p>
 				<p>
-					<a target="_blank" href="https://chrome.google.com/webstore/detail/keepasshttp-connector/dafgdjggglmmknipkhngniifhplpcldb" id="chrome-web-store-link">Visit extension's page in Chrome Web store</a>
+					<a target="_blank" rel="noopener noreferrer" href="https://github.com/odyodyodys/keepasshttp-neo">Project page on GitHub</a>
 				</p>
-				<p>
-					<a target="_blank" href="https://github.com/smorks/keepasshttp-connector">Visit project's page in GitHub</a>.
-				</p>
-				<hr />
-				<div class="row">
-					<div class="span3">KeePassHttp-Neo Version:</div>
-					<div class="span6"><em class="versionCIP"></em></div>
-				</div>
-				<div class="row">
-					<div class="span3">KeePassHttp Version:</div>
-					<div class="span6"><em class="versionKPH"></em></div>
-				</div>
-			</div>
-			<hr>
-			<div class="footer">
-				<p>2010-2017 - Perry Nguyen, Lukas Schulze</p>
-			</div>
-		</div> <!-- /container -->
+				<hr>
+				<dl class="versions">
+					<dt>KeePassHttp-Neo version:</dt>
+					<dd><em class="versionCIP"></em></dd>
+					<dt>KeePassHttp version:</dt>
+					<dd><em class="versionKPH"></em></dd>
+				</dl>
+			</section>
+
+			<footer>
+				Based on work by Perry Nguyen, Lukas Schulze, Angus Gratton and Andy Brandt.
+			</footer>
+		</div>
 	</body>
 </html>

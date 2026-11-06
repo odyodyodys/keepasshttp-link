@@ -25,6 +25,8 @@ npm run test:real                # all scenarios on the real test KeePass (see b
 node run.js --list               # list the scenario names
 HEADLESS=0 npm test              # show the Firefox window
 FF_PWMGR=1 npm test              # keep Firefox's built-in password manager on
+SHOTS=1 npm test -- options toolbar   # also save screenshots of the extension pages
+SHOTS=1 DARK=1 npm test -- options    # the same in dark mode
 ```
 
 The runner prints one summary line and exits with code 1 if any scenario fails.

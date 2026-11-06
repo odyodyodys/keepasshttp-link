@@ -42,7 +42,7 @@ It is a modified version of [KeePassHttp-Connector](https://github.com/smorks/ke
 - **HTTP Basic Auth**: fill the browser's login dialog.
 - **Safer by design**: passwords stay inside the extension until you fill one, and the injected UI is hidden from web pages. More in [Security](#security).
 - **Works with non-English text**: usernames, passwords and URLs are UTF-8 in both directions.
-- **No data collection**, no online calls, and no third-party code in web pages.
+- **No data collection**, no online calls, and no third-party UI libraries: plain JavaScript and CSS, with light and dark mode.
 
 ## Requirements
 

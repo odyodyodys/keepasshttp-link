@@ -1,72 +1,61 @@
+var POPUP_STATES = ["initial-state", "error-encountered", "need-reconfigure", "not-configured",
+	"configured-and-associated", "configured-not-associated"];
+
+function showState(id) {
+	POPUP_STATES.forEach(function(s) {
+		document.getElementById(s).hidden = (s !== id);
+	});
+}
+
+// Error text can come from KeePassHttp: always insert it as text, never as HTML.
 function status_response(r) {
-	$('#initial-state').hide();
-	$('#error-encountered').hide();
-	$('#need-reconfigure').hide();
-	$('#not-configured').hide();
-	$('#configured-and-associated').hide();
-	$('#configured-not-associated').hide();
-
-
-	// Error text can come from KeePassHttp: always insert it as text, never as HTML.
 	if(!r.keePassHttpAvailable || r.databaseClosed) {
-		$('#error-message').text(r.error || "");
-		$('#error-encountered').show();
+		document.getElementById("error-message").textContent = r.error || "";
+		showState("error-encountered");
 	}
 	else if(!r.configured) {
-		$('#not-configured').show();
+		showState("not-configured");
 	}
-	else if(r.encryptionKeyUnrecognized) {
-		$('#need-reconfigure').show();
-		$('#need-reconfigure-message').text(r.error || "");
-	}
-	else if(!r.associated) {
-		$('#need-reconfigure').show();
-		$('#need-reconfigure-message').text(r.error || "");
+	else if(r.encryptionKeyUnrecognized || !r.associated) {
+		document.getElementById("need-reconfigure-message").textContent = r.error || "";
+		showState("need-reconfigure");
 	}
 	else if(typeof(r.error) != "undefined") {
-		$('#error-encountered').show();
-		$('#error-message').text(r.error || "");
+		document.getElementById("error-message").textContent = r.error || "";
+		showState("error-encountered");
 	}
 	else {
-		$('#configured-and-associated').show();
-		$('#associated-identifier').text(r.identifier || "");
+		document.getElementById("associated-identifier").textContent = r.identifier || "";
+		showState("configured-and-associated");
 	}
 }
 
-$(function() {
-	$("#connect-button").click(function() {
-		browser.runtime.sendMessage({
-			action: "associate"
-		});
-		close();
+function associate() {
+	browser.runtime.sendMessage({
+		action: "associate"
 	});
+	close();
+}
 
-	$("#reconnect-button").click(function() {
-		browser.runtime.sendMessage({
-			action: "associate"
-		});
-		close();
-	});
+document.getElementById("connect-button").addEventListener("click", associate);
+document.getElementById("reconnect-button").addEventListener("click", associate);
 
-	$("#reload-status-button").click(function() {
-		browser.runtime.sendMessage({
-			action: "get_status"
-		}).then(status_response);
-	});
-
-	$("#redetect-fields-button").click(function() {
-		browser.tabs.query({"active": true, "currentWindow": true}).then(function(tabs) {
-			if (tabs.length === 0)
-				return; // For example: only the background devtools or a popup are opened
-			var tab = tabs[0];
-
-			browser.tabs.sendMessage(tab.id, {
-				action: "redetect_fields"
-			});
-		});
-	});
-
+document.getElementById("reload-status-button").addEventListener("click", function() {
 	browser.runtime.sendMessage({
 		action: "get_status"
 	}).then(status_response);
 });
+
+document.getElementById("redetect-fields-button").addEventListener("click", function() {
+	browser.tabs.query({"active": true, "currentWindow": true}).then(function(tabs) {
+		if (tabs.length === 0)
+			return; // For example: only the background devtools or a popup are opened
+		browser.tabs.sendMessage(tabs[0].id, {
+			action: "redetect_fields"
+		});
+	});
+});
+
+browser.runtime.sendMessage({
+	action: "get_status"
+}).then(status_response);

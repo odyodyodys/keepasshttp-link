@@ -1,24 +1,22 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 	<head>
-		<title>KeePass - Popup</title>
-		<link rel="stylesheet" href="popup.css" />
-		<link rel="stylesheet" href="../bootstrap-btn.css" />
-		<script type="text/javascript" src="../browser-polyfill.min.js"></script>
-		<script type="text/javascript" src="../jquery-3.7.1.min.js"></script>
-		<script type="text/javascript" src="popup_functions.js"></script>
+		<meta charset="utf-8">
+		<title>KeePassHttp-Neo</title>
+		<link rel="stylesheet" href="../ui.css">
+		<script src="../browser-polyfill.min.js" defer></script>
+		<script src="popup_functions.js" defer></script>
 	</head>
-	<body>
+	<body class="popup">
 		<div id="settings" class="settings">
-			<button id="btn-options" class="b2c-btn b2c-btn-small b2c-btn-warning">Settings</button>
-			<button id="btn-choose-credential-fields" class="b2c-btn b2c-btn-small">Choose own credential fields for this page</button>
+			<button id="btn-options" type="button" class="small">Settings</button>
+			<button id="btn-choose-credential-fields" type="button" class="small">Choose own credential fields for this page</button>
 		</div>
 
-		<div>
-			<p>
-				KeePassHttp-Neo found more than one password field on this page. To enter your
-				logins, right-click on one of the password fields, and choose either the
-				"<code>Fill User + Pass</code>" or "<code>Fill Pass Only</code>" command.
-			</p>
-		</div>
+		<p>
+			KeePassHttp-Neo found more than one password field on this page. To enter your
+			logins, right-click on one of the password fields, and choose either the
+			"<code>Fill User + Pass</code>" or "<code>Fill Pass Only</code>" command.
+		</p>
 	</body>
 </html>

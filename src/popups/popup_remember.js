@@ -1,5 +1,9 @@
 var _tab;
 
+function $q(selector) {
+	return document.querySelector(selector);
+}
+
 function _initialize(tab) {
 	_tab = tab;
 
@@ -11,22 +15,22 @@ function _initialize(tab) {
 
 	// no existing credentials to update --> disable update-button
 	if(_tab.credentials.list.length == 0) {
-		$("#btn-update").attr("disabled", true).removeClass("b2c-btn-warning");
+		$q("#btn-update").disabled = true;
 	}
 
 	var url = _tab.credentials.url;
 	url = (url.length > 50) ? url.substring(0, 50) + "..." : url;
-	$(".information-url:first span:first").text(url);
-	$(".information-username:first span:first").text(_tab.credentials.username);
+	$q(".information-url span").textContent = url;
+	$q(".information-username span").textContent = _tab.credentials.username;
 
-	$("#btn-new").click(function(e) {
+	$q("#btn-new").addEventListener("click", function() {
 		browser.runtime.sendMessage({
 			action: 'add_credentials',
 			args: [_tab.credentials.username, _tab.credentials.password, _tab.credentials.url]
 		}).then(_verifyResult);
 	});
 
-	$("#btn-update").click(function(e) {
+	$q("#btn-update").addEventListener("click", function(e) {
 		e.preventDefault();
 
 		// only one entry which could be updated
@@ -35,58 +39,52 @@ function _initialize(tab) {
 				action: 'update_credentials',
 				args: [_tab.credentials.list[0].Uuid, _tab.credentials.username, _tab.credentials.password, _tab.credentials.url]
 			}).then(_verifyResult);
+			return;
 		}
-		else {
-			$(".credentials:first .username-new:first strong:first").text(_tab.credentials.username);
-			$(".credentials:first .username-exists:first strong:first").text(_tab.credentials.username);
 
-			if(_tab.credentials.usernameExists) {
-				$(".credentials:first .username-new:first").hide();
-				$(".credentials:first .username-exists:first").show();
+		$q(".credentials .username-new strong").textContent = _tab.credentials.username;
+		$q(".credentials .username-exists strong").textContent = _tab.credentials.username;
+		$q(".credentials .username-new").hidden = !!_tab.credentials.usernameExists;
+		$q(".credentials .username-exists").hidden = !_tab.credentials.usernameExists;
+
+		var ul = $q("ul#list");
+		ul.textContent = "";
+		_tab.credentials.list.forEach(function(entry) {
+			var a = document.createElement("a");
+			a.href = "#";
+			a.textContent = entry.Login + " (" + entry.Name + ")";
+			a.addEventListener("click", function(e) {
+				e.preventDefault();
+				browser.runtime.sendMessage({
+					action: 'update_credentials',
+					args: [entry.Uuid, _tab.credentials.username, _tab.credentials.password, _tab.credentials.url]
+				}).then(_verifyResult);
+			});
+			if(_tab.credentials.usernameExists && _tab.credentials.username == entry.Login) {
+				a.classList.add("match");
 			}
-			else {
-				$(".credentials:first .username-new:first").show();
-				$(".credentials:first .username-exists:first").hide();
-			}
+			var li = document.createElement("li");
+			li.appendChild(a);
+			ul.appendChild(li);
+		});
 
-			for(var i = 0; i < _tab.credentials.list.length; i++) {
-				var $a = $("<a>")
-					.attr("href", "#")
-					.text(_tab.credentials.list[i].Login + " (" + _tab.credentials.list[i].Name + ")")
-					.data("entryId", i)
-					.click(function(e) {
-						e.preventDefault();
-						browser.runtime.sendMessage({
-							action: 'update_credentials',
-							args: [_tab.credentials.list[$(this).data("entryId")].Uuid, _tab.credentials.username, _tab.credentials.password, _tab.credentials.url]
-						}).then(_verifyResult);
-					});
-
-				if(_tab.credentials.usernameExists && _tab.credentials.username == _tab.credentials.list[i].Login) {
-					$a.css("font-weight", "bold");
-				}
-
-				var $li = $("<li>").append($a);
-				$("ul#list").append($li);
-			}
-
-			$(".credentials").show();
-		}
+		$q(".credentials").hidden = false;
 	});
 
-	$("#btn-dismiss").click(function(e) {
+	$q("#btn-dismiss").addEventListener("click", function(e) {
 		e.preventDefault();
 		_close();
 	});
 }
 
 function _connected_database(db) {
+	var box = $q(".connected-database");
 	if(db.count > 1 && db.identifier) {
-		$(".connected-database:first em:first").text(db.identifier);
-		$(".connected-database:first").show();
+		$q(".connected-database em").textContent = db.identifier;
+		box.hidden = false;
 	}
 	else {
-		$(".connected-database:first").hide();
+		box.hidden = true;
 	}
 }
 
@@ -108,17 +106,15 @@ function _close() {
 	close();
 }
 
-$(function() {
-	browser.runtime.sendMessage({
-		action: 'stack_add',
-		args: ["save", "popup_remember.html", 10, true, 0]
-	});
-
-	browser.runtime.sendMessage({
-		action: 'get_tab_information'
-	}).then(_initialize);
-
-	browser.runtime.sendMessage({
-		action: 'get_connected_database'
-	}).then(_connected_database);
+browser.runtime.sendMessage({
+	action: 'stack_add',
+	args: ["save", "popup_remember.html", 10, true, 0]
 });
+
+browser.runtime.sendMessage({
+	action: 'get_tab_information'
+}).then(_initialize);
+
+browser.runtime.sendMessage({
+	action: 'get_connected_database'
+}).then(_connected_database);

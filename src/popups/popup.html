@@ -1,47 +1,43 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 	<head>
-		<title>KeePass - Popup</title>
-		<link rel="stylesheet" href="popup.css" />
-		<link rel="stylesheet" href="../bootstrap-btn.css" />
-		<script type="text/javascript" src="../browser-polyfill.min.js"></script>
-		<script type="text/javascript" src="../jquery-3.7.1.min.js"></script>
-		<script type="text/javascript" src="popup_functions.js"></script>
-		<script type="text/javascript" src="popup.js"></script>
+		<meta charset="utf-8">
+		<title>KeePassHttp-Neo</title>
+		<link rel="stylesheet" href="../ui.css">
+		<script src="../browser-polyfill.min.js" defer></script>
+		<script src="popup_functions.js" defer></script>
+		<script src="popup.js" defer></script>
 	</head>
-	<body>
+	<body class="popup">
 		<div id="settings" class="settings">
-			<button id="btn-options" class="b2c-btn b2c-btn-small b2c-btn-warning">Settings</button>
-			<button id="btn-choose-credential-fields" class="b2c-btn b2c-btn-small">Choose own credential fields for this page</button>
+			<button id="btn-options" type="button" class="small">Settings</button>
+			<button id="btn-choose-credential-fields" type="button" class="small">Choose own credential fields for this page</button>
 		</div>
 
 		<div id="initial-state">
-			<p><img style="margin-right: 1em" src="throbber.gif"/> Checking status...</p>
+			<p><img style="margin-right: 1em; vertical-align: middle" src="throbber.gif" alt=""> Checking status...</p>
 		</div>
 
-		<div id="not-configured" style="display: none">
+		<div id="not-configured" hidden>
 			<p>
 				KeePassHttp-Neo has not been configured.
 				Press the connect button to register and pair with KeePassHttp.
 			</p>
-			<div style="text-align: right">
-				<button id="connect-button" class="b2c-btn b2c-btn-primary">Connect</button>
+			<div class="actions">
+				<button id="connect-button" type="button" class="primary">Connect</button>
 			</div>
 		</div>
 
-		<div id="need-reconfigure" style="display: none">
-			<p>
-				KeePassHttp-Neo has been disconnected from KeePassHttp.
-			</p>
+		<div id="need-reconfigure" hidden>
+			<p>KeePassHttp-Neo has been disconnected from KeePassHttp.</p>
 			<code id="need-reconfigure-message"></code>
-			<p>
-				Press the reconnect button to establish a new connection.
-			</p>
-			<div style="text-align: right">
-				<button id="reconnect-button" class="b2c-btn b2c-btn-primary">Reconnect</button>
+			<p>Press the reconnect button to establish a new connection.</p>
+			<div class="actions">
+				<button id="reconnect-button" type="button" class="primary">Reconnect</button>
 			</div>
 		</div>
 
-		<div id="configured-not-associated" style="display: none">
+		<div id="configured-not-associated" hidden>
 			<p>
 				KeePassHttp-Neo has been configured using the identifier
 				<em id="unassociated-identifier"></em> and has not yet
@@ -49,26 +45,22 @@
 			</p>
 		</div>
 
-		<div id="configured-and-associated" style="display: none">
+		<div id="configured-and-associated" hidden>
 			<p>
 				KeePassHttp-Neo has been configured using the identifier
 				"<em id="associated-identifier"></em>" and is successfully
 				connected to KeePassHttp.
 			</p>
-			<div style="text-align: right">
-				<button id="redetect-fields-button" class="b2c-btn">Redetect credential fields</button>
+			<div class="actions">
+				<button id="redetect-fields-button" type="button">Redetect credential fields</button>
 			</div>
 		</div>
 
-		<div id="error-encountered" style="display: none">
-			<p>
-				KeePassHttp-Neo has encountered an error:
-			</p>
-			<p style="margin-left: 1em">
-				<code id="error-message"></code>
-			</p>
-			<div style="text-align: right">
-				<button id="reload-status-button" class="b2c-btn">Reload</button>
+		<div id="error-encountered" hidden>
+			<p>KeePassHttp-Neo has encountered an error:</p>
+			<p style="margin-left: 1em"><code id="error-message"></code></p>
+			<div class="actions">
+				<button id="reload-status-button" type="button">Reload</button>
 			</div>
 		</div>
 	</body>
