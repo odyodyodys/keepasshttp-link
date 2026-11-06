@@ -217,6 +217,7 @@ cipevent.onLoadKeyRing = function(callback, tab) {
 				"hash": null
 			};
 		}
+		browserAction.refreshAll();
 		callback(item.keyRing);
 	}, (err) => {
 		console.log('error loading keyRing: ' + err);

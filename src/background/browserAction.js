@@ -14,10 +14,7 @@ browserAction.show = function(callback, tab) {
 		data = page.tabs[tab.id].stack[page.tabs[tab.id].stack.length - 1];
 	}
 
-	browser.browserAction.setIcon({
-		tabId: tab.id,
-		path: "/icons/19x19/" + browserAction.generateIconName(data.iconType, data.icon)
-	});
+	browserAction.setIcon(tab.id, browserAction.iconState(data.iconType, data.icon));
 
 	if(data.popup) {
 		browser.browserAction.setPopup({
@@ -57,10 +54,7 @@ browserAction.update = function(interval) {
 			data.intervalIcon.index = 0;
 		}
 
-		browser.browserAction.setIcon({
-			tabId: page.currentTabId,
-			path: "/icons/19x19/" + browserAction.generateIconName(null, data.intervalIcon.icons[data.intervalIcon.index])
-		});
+		browserAction.setIcon(page.currentTabId, browserAction.iconState(null, data.intervalIcon.icons[data.intervalIcon.index]));
 	}
 }
 
@@ -234,9 +228,9 @@ browserAction.setRememberPopup = function(tabId, username, password, url, userna
 				index: 0,
 				counter: 0,
 				max: 2,
-				icons: ["icon_remember_red_background_19x19.png", "icon_remember_red_lock_19x19.png"]
+				icons: ["save", "normal"]
 			},
-			icon: "icon_remember_red_background_19x19.png",
+			icon: "save",
 			popup: "popup_remember.html"
 		}
 
@@ -276,15 +270,39 @@ function getValueOrDefault(settings, key, defaultVal, min) {
 	} catch(e) { return defaultVal; }
 }
 
-browserAction.generateIconName = function(iconType, icon) {
-	if(icon) {
+// Icon state for a stack entry: an explicit state ("save", ...) or the
+// old icon types "normal", "cross" (KeePass not reachable) and
+// "questionmark" (logins to choose from).
+browserAction.iconState = function(iconType, icon) {
+	if(kphIcon.STATES.indexOf(icon) >= 0) {
 		return icon;
 	}
-
-	var name = "icon_";
-	name += (!iconType || iconType == "normal") ? "normal_" : iconType + "_";
-	name += keepass.getIconColor();
-	name += "_19x19.png";
-
-	return name;
+	if(iconType === "cross") {
+		return "off";
+	}
+	if(iconType === "questionmark") {
+		return "choose";
+	}
+	return "normal";
 }
+
+browserAction.setIcon = function(tabId, state) {
+	browser.browserAction.setIcon({
+		tabId: tabId,
+		imageData: kphIcon.imageData(state, keepass.getIconColor())
+	}).catch(function() {
+		// The tab was closed.
+	});
+}
+
+// Redraw the icon of every known tab (new color, or the toolbar switched
+// between light and dark).
+browserAction.refreshAll = function() {
+	for(var id in page.tabs) {
+		browserAction.show(null, {"id": Number(id)});
+	}
+}
+
+try {
+	window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", browserAction.refreshAll);
+} catch(e) { /* no matchMedia: keep the light icons */ }

@@ -111,7 +111,7 @@ function _close() {
 $(function() {
 	browser.runtime.sendMessage({
 		action: 'stack_add',
-		args: ["icon_remember_red_background_19x19.png", "popup_remember.html", 10, true, 0]
+		args: ["save", "popup_remember.html", 10, true, 0]
 	});
 
 	browser.runtime.sendMessage({

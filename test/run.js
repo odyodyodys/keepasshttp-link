@@ -1249,19 +1249,59 @@ async function toolbarIcon(driver) {
   return inChrome(driver, (ext, tab, EP) =>
     JSON.stringify(EP.apiManager.global.browserActionFor(ext).action.getProperty(tab, 'icon') || null));
 }
+// SHOTS=1: screenshot of the browser window with its toolbar (chrome context).
+async function shotChrome(driver, name) {
+  await driver.setContext(firefox.Context.CHROME);
+  try { writeFileSync(path.join(ART, name + '.png'), await driver.takeScreenshot(), 'base64'); }
+  finally { await driver.setContext(firefox.Context.CONTENT); }
+}
 scenarios.toolbar = async function (driver) {
   await configure(driver, { autoFillSingleEntry: false });
   await setTamper('none');
   await openPage(driver, PAGES_TLS.replace('{host}', 'multi') + '/login.html');
   const withLogins = { popup: await toolbarPopup(driver), icon: await toolbarIcon(driver) };
+  if (process.env.SHOTS) await shotChrome(driver, 'toolbar-choose');
   await setTamper('locked');
   await openPage(driver, PAGES_TLS.replace('{host}', 'multi') + '/login.html');
   await sleep(1500);
   const locked = { popup: await toolbarPopup(driver), icon: await toolbarIcon(driver) };
   await setTamper('none');
   const iconsDiffer = withLogins.icon !== locked.icon;
-  return { withLogins: withLogins.popup, locked: locked.popup, iconsDiffer,
-    pass: withLogins.popup === 'popup_login.html' && locked.popup === 'popup.html' && iconsDiffer };
+
+  // Icon color per connection, set in the settings page (Connected Databases).
+  await openExtPage(driver, 'options/options.html');
+  await driver.findElement(By.css('a[href="#connected-databases"]')).click();
+  await sleep(300);
+  const row = await driver.findElement(By.css('tr[id^="tr-cd-"]'));
+  const hex = await row.findElement(By.css('input.kph-hex'));
+  await hex.sendKeys('#zz');
+  await sleep(300);
+  const invalidShown = (await hex.getAttribute('class')).includes('kph-invalid');
+  if (process.env.SHOTS) writeFileSync(path.join(ART, 'toolbar-settings.png'), await driver.takeScreenshot(), 'base64');
+  const afterInvalid = Object.values(await readKeyRing(driver)).map((k) => k.icon || 'blue');
+  await hex.clear();
+  await hex.sendKeys('#FF00AA');
+  await sleep(500);
+  const afterCustom = Object.values(await readKeyRing(driver)).map((k) => k.icon);
+  await toWebTab(driver);
+  await openPage(driver, PAGES_TLS.replace('{host}', 'multi') + '/login.html');
+  const customIcon = await toolbarIcon(driver);
+  if (process.env.SHOTS) { await shotChrome(driver, 'toolbar-custom'); writeFileSync(path.join(ART, 'toolbar-icons.json'), JSON.stringify({ choose: withLogins.icon, off: locked.icon, custom: customIcon })); }
+
+  // Back to the default with the "blue" swatch.
+  await openExtPage(driver, 'options/options.html');
+  await driver.findElement(By.css('a[href="#connected-databases"]')).click();
+  await sleep(300);
+  await (await driver.findElement(By.css('tr[id^="tr-cd-"]'))).findElement(By.css('button.kph-swatch[data-color="blue"]')).click();
+  await sleep(500);
+  const afterSwatch = Object.values(await readKeyRing(driver)).map((k) => k.icon);
+  await toWebTab(driver);
+
+  const colorOk = invalidShown && !afterInvalid.includes('#zz') && afterCustom.includes('#ff00aa') &&
+    customIcon !== withLogins.icon && afterSwatch.includes('blue');
+  return { withLogins: withLogins.popup, locked: locked.popup, iconsDiffer, invalidShown,
+    afterInvalid, afterCustom, customIconDiffers: customIcon !== withLogins.icon, afterSwatch,
+    pass: withLogins.popup === 'popup_login.html' && locked.popup === 'popup.html' && iconsDiffer && colorOk };
 };
 
 // ---------- main ----------

@@ -187,19 +187,6 @@ options.initConnectedDatabases = function() {
 		}
 	});
 
-	$("#tab-connected-databases tr.clone:first .dropdown-menu:first").width("230px");
-
-	$("#tab-connected-databases tr.clone:first .color.dropdown .dropdown-menu a").click(function(e) {
-		e.preventDefault();
-		var $icon = $(this).attr("href").substring(1);
-		var $hash = $(this).closest("tr").data("hash");
-
-		$(this).parent().parent().find("a.dropdown-toggle:first").find("img:first").attr("src", "/icons/19x19/icon_normal_" + $icon + "_19x19.png");
-
-		options.keyRing[$hash].icon = $icon;
-		options.saveKeyRing();
-	});
-
 	var $trClone = $("#tab-connected-databases table tr.clone:first").clone(true);
 	$trClone.removeClass("clone");
 	for(var hash in options.keyRing) {
@@ -207,8 +194,7 @@ options.initConnectedDatabases = function() {
 		$tr.data("hash", hash);
 		$tr.attr("id", "tr-cd-" + hash);
 
-		var $icon = options.keyRing[hash].icon || "blue";
-		$("a.dropdown-toggle:first img:first", $tr).attr("src", "/icons/19x19/icon_normal_" + $icon + "_19x19.png");
+		options.colorPicker($(".kph-color", $tr)[0], hash);
 
 		$tr.children("td:first").text(options.keyRing[hash].id);
 		var lastUsed = (options.keyRing[hash].lastUsed) ? new Date(options.keyRing[hash].lastUsed).toLocaleString() : "unknown";
@@ -289,3 +275,85 @@ options.initAbout = function() {
 		}
 	});
 }
+
+// Toolbar icon color of one connected database: preset swatches, a custom
+// "#rrggbb" field, and a preview on a light and a dark toolbar.
+// Built with DOM APIs; the color is only used as a canvas or CSS color value.
+options.colorPicker = function(container, hash) {
+	var current = kphIcon.normalize(options.keyRing[hash].icon);
+
+	var previews = document.createElement("div");
+	previews.className = "kph-previews";
+	var canvases = [false, true].map(function(dark) {
+		var chip = document.createElement("span");
+		chip.className = "kph-chip";
+		chip.title = dark ? "Dark toolbar" : "Light toolbar";
+		chip.style.background = dark ? "#2b2a33" : "#f9f9fb";
+		var c = document.createElement("canvas");
+		c.width = 32;
+		c.height = 32;
+		c.dataset.dark = dark ? "1" : "";
+		chip.appendChild(c);
+		previews.appendChild(chip);
+		return c;
+	});
+
+	var input = document.createElement("input");
+	input.type = "text";
+	input.className = "kph-hex";
+	input.maxLength = 7;
+	input.placeholder = "#rrggbb";
+	input.setAttribute("aria-label", "Custom color, #rrggbb");
+	input.value = kphIcon.isHex(current) ? current : "";
+	input.addEventListener("input", function() {
+		var v = input.value.trim();
+		var ok = kphIcon.isHex(v);
+		input.classList.toggle("kph-invalid", v !== "" && !ok);
+		if(ok) {
+			set(v);
+		}
+	});
+
+	var swatches = document.createElement("div");
+	swatches.className = "kph-swatches";
+	kphIcon.presets.forEach(function(p) {
+		var b = document.createElement("button");
+		b.type = "button";
+		b.className = "kph-swatch";
+		b.title = p.id;
+		b.setAttribute("aria-label", p.id);
+		b.dataset.color = p.id;
+		b.style.background = p.light;
+		b.addEventListener("click", function() {
+			input.value = "";
+			input.classList.remove("kph-invalid");
+			set(p.id);
+		});
+		swatches.appendChild(b);
+	});
+
+	function draw() {
+		canvases.forEach(function(c) {
+			var ctx = c.getContext("2d");
+			ctx.setTransform(1, 0, 0, 1, 0, 0);
+			ctx.clearRect(0, 0, 32, 32);
+			ctx.scale(2, 2);
+			kphIcon.paint(ctx, "normal", current, c.dataset.dark === "1");
+		});
+		Array.prototype.forEach.call(swatches.children, function(b) {
+			b.classList.toggle("kph-selected", b.dataset.color === current);
+		});
+	}
+
+	function set(value) {
+		current = kphIcon.normalize(value);
+		options.keyRing[hash].icon = current;
+		options.saveKeyRing();
+		draw();
+	}
+
+	container.appendChild(previews);
+	container.appendChild(swatches);
+	container.appendChild(input);
+	draw();
+};

@@ -109,7 +109,7 @@ Open the settings from the toolbar popup, or from the extension's page in `about
 | Supress warnings and errors via alert | On | Do not show warnings and errors as page alerts |
 | Port | 19455 | Must match the port in the KeePassHttp plugin options |
 
-The settings page also lists your **connected databases** and the **fields you chose** per site. You can remove both there.
+The settings page also lists your **connected databases**. Give each one its own toolbar icon color, from the presets or as a `#rrggbb` value, to see at a glance which database is in use. It also lists the **fields you chose** per site. You can remove connections and fields there.
 
 ## How it works
 
