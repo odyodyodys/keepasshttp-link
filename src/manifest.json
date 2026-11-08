@@ -1,5 +1,5 @@
 {
-	"name": "KeePassHttp-Neo",
+	"name": "KeePassHttp-Link",
 	"version": "2.0.0",
 	"manifest_version": 2,
 	"description": "Fill KeePass logins in Firefox, through the KeePassHttp plugin on localhost.",
@@ -10,7 +10,7 @@
 	},
 	"browser_specific_settings": {
 		"gecko": {
-			"id": "keepasshttp-neo@odyodyodys.github.io",
+			"id": "keepasshttp-link@odyodyodys.github.io",
 			"strict_min_version": "140.0",
 			"data_collection_permissions": {
 				"required": ["none"]
@@ -26,7 +26,7 @@
 			{ "light": "icons/toolbar-normal-dark.svg", "dark": "icons/toolbar-normal-light.svg", "size": 16 },
 			{ "light": "icons/toolbar-normal-dark.svg", "dark": "icons/toolbar-normal-light.svg", "size": 32 }
 		],
-		"default_title": "KeePassHttp-Neo",
+		"default_title": "KeePassHttp-Link",
 		"default_popup": "popups/popup.html"
 	},
 	"options_ui": {

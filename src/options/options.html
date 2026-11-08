@@ -3,245 +3,502 @@
 	<head>
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
-		<title>Settings | KeePassHttp-Neo</title>
+		<title>Settings | KeePassHttp-Link</title>
 		<link rel="stylesheet" href="../ui.css">
-		<script src="../background/icon.js" defer></script>
+		<link rel="stylesheet" href="options.css">
 		<script src="options.js" defer></script>
 	</head>
 	<body class="options">
 		<div class="container">
-			<header>
-				<img src="/icons/icon.svg" width="48" height="48" alt="">
-				<h1>KeePassHttp-Neo</h1>
+			<header class="page-head">
+				<img src="/icons/icon.svg" width="36" height="36" alt="">
+				<h1>KeePassHttp-Link</h1>
 			</header>
 
-			<nav role="tablist" aria-label="Settings sections">
-				<a href="#general-settings" role="tab" aria-selected="true">General</a>
-				<a href="#connected-databases" role="tab" aria-selected="false">Connected Databases</a>
-				<a href="#specified-fields" role="tab" aria-selected="false">Specified credential fields</a>
-				<a href="#about" role="tab" aria-selected="false">About</a>
-			</nav>
-
-			<!-- General -->
-			<section class="tab" id="tab-general-settings" role="tabpanel">
-				<h2>General Settings</h2>
-				<p>
-					To fill username and password into the focused form, press <code>Alt + Shift + U</code>.
-					To fill only the password, press <code>Alt + Shift + P</code>.
-					You can change these shortcuts in <code>about:addons</code> → gear icon → <em>Manage Extension Shortcuts</em>.
-				</p>
-
-				<div class="field">
-					<label for="blinkTimeout">Blink Time</label>
-					<div class="row">
-						<input type="number" id="blinkTimeout" placeholder="7500" value="7500">
-						<button id="blinkTimeoutButton" type="button">Save</button>
-						<span class="status" aria-live="polite"></span>
+			<!-- ============================ Status card ============================
+			     The only place that describes the connection. Filled by options.js
+			     from one derived state (A, A2, B, B-wait, B2, B3, C). -->
+			<section class="status-card" id="status-card" aria-label="Connection to KeePass" hidden>
+				<!-- Diagram: decorative (the sentence below carries the meaning),
+				     except the two module buttons that open a short info popover. -->
+				<div class="diagram">
+					<div class="d-box d-keepass" aria-hidden="true">
+						<span>KeePass</span>
+						<span class="d-caption" id="d-caption" hidden><span class="chip chip-caption"></span> is open, not active</span>
 					</div>
-					<span class="help">The maximum time (ms) the icon blinks after new credentials are detected. Default: 7500</span>
-				</div>
-
-				<div class="field">
-					<label for="blinkMinTimeout">Redirect Offset</label>
-					<div class="row">
-						<input type="number" id="blinkMinTimeout" placeholder="2000" value="2000">
-						<button id="blinkMinTimeoutButton" type="button">Save</button>
-						<span class="status" aria-live="polite"></span>
+					<div class="d-box d-firefox" aria-hidden="true">Firefox</div>
+					<button type="button" class="d-module d-ext" aria-haspopup="dialog" aria-expanded="false" aria-controls="pop-ext"><span><b>KeePassHttp-Link</b><br><span class="d-sub">this extension</span></span><span class="d-badge"></span></button>
+					<button type="button" class="d-module d-plugin" aria-haspopup="dialog" aria-expanded="false" aria-controls="pop-plugin"><span><b>KeePassHttp plugin</b><br><span class="d-sub">in KeePass</span></span><span class="d-badge"></span></button>
+					<div class="d-link" id="d-link" aria-hidden="true"></div>
+					<div class="d-link-label" id="d-link-label" aria-hidden="true" hidden></div>
+					<div class="d-tile" id="d-tile" aria-hidden="true" hidden>
+						<span class="d-tile-icon"></span>
+						<span><b class="d-tile-name"></b><br><span class="d-tile-state"></span></span>
 					</div>
-					<span class="help">The minimum time (ms) the icon blinks before page redirects stop it.
-						-1 uses only <em>Blink Time</em> and ignores Redirect Allowance (old behavior). Default: -1, recommended: 2000</span>
-				</div>
 
-				<div class="field">
-					<label for="allowedRedirect">Redirect Allowance</label>
-					<div class="row">
-						<input type="number" id="allowedRedirect" placeholder="1" value="1">
-						<button id="allowedRedirectButton" type="button">Save</button>
-						<span class="status" aria-live="polite"></span>
-					</div>
-					<span class="help">How many pages the tab can go through after the redirect offset before the icon stops blinking. Default: 1</span>
-				</div>
-
-				<hr>
-
-				<div class="check">
-					<label><input type="checkbox" name="usePasswordGenerator"> Activate password generator</label>
-					<span class="help">Adds an icon to every password field to generate a new password.
-						KeePass generates it with its profile for new entries.</span>
-				</div>
-				<div class="check">
-					<label><input type="checkbox" name="autoRetrieveCredentials"> Automatically retrieve credentials</label>
-					<span class="help">Ask KeePass for the logins of a page as soon as the tab is active.</span>
-				</div>
-				<div class="check">
-					<label><input type="checkbox" name="autoFillSingleEntry"> Automatically fill in a single credentials entry</label>
-					<span class="help">When KeePass returns exactly one login, fill it into the detected fields without asking.</span>
-				</div>
-				<div class="check">
-					<label><input type="checkbox" name="autoCompleteUsernames"> Activate autocomplete for username fields</label>
-					<span class="help">Show a list of the available logins under every username field.</span>
-				</div>
-
-				<hr>
-
-				<div class="help kphVersion">
-					KeePassHttp-Neo needs the KeePassHttp plugin in KeePass. It is tested with KeePassHttp 2.3.1.0 from
-					<a target="_blank" rel="noopener noreferrer" href="https://github.com/alan-null/keepasshttp">github.com/alan-null/keepasshttp</a>.
-					<dl class="versions">
-						<dt>Your version of KeePassHttp:</dt>
-						<dd><em class="yourVersion"></em></dd>
-					</dl>
-				</div>
-
-				<hr>
-
-				<div class="check" id="http-auth-options">
-					<label><input type="checkbox" name="autoFillAndSend"> Auto fill HTTP Auth dialogs and send them</label>
-					<span class="help">When a page asks for HTTP Basic Auth (the browser's own login dialog, below), log in with the first login found.
-						This happens only on https pages; on http pages you choose the login yourself.</span>
-					<img src="/options/http-auth-dialog.png" alt="Example of an HTTP Auth dialog">
-				</div>
-
-				<hr>
-
-				<details id="dangerousSettings">
-					<summary>Advanced settings</summary>
-					<p class="alert"><strong>Attention!</strong> Change these settings only if you know what you are doing.</p>
-					<p>
-						KeePassHttp-Neo talks to KeePassHttp on <code>http://localhost:[port]</code>.
-						KeePass must run on this computer: remote KeePass hosts are not supported, because the connection is plain HTTP.
-						If the default port is in use, change it in the KeePassHttp options and set the same port here.
-					</p>
-					<div class="field">
-						<label for="port">Port</label>
-						<div class="row">
-							<input type="number" id="port" min="1025" max="65535" placeholder="19455" value="19455">
-							<button id="portButton" type="button">Save</button>
-							<span class="status" aria-live="polite"></span>
+					<!-- Info popovers for the two modules. -->
+					<div class="d-popover pop-ext" id="pop-ext" role="dialog" aria-labelledby="pop-ext-title" hidden>
+						<div class="pop-arrow"></div>
+						<div class="pop-head">
+							<div class="pop-title" id="pop-ext-title">KeePassHttp-Link</div>
+							<button type="button" class="pop-close" aria-label="Close"></button>
 						</div>
-						<span class="help">Must be the same as in the KeePassHttp options. Range 1025 to 65535. Default: 19455</span>
+						<div class="pop-desc">Connects Firefox to KeePass, so you can fill and save your website logins.</div>
+						<div class="pop-actions">
+							<a class="pop-link" href="https://github.com/odyodyodys/keepasshttp-link" target="_blank" rel="noopener noreferrer">Plugin page</a>
+						</div>
 					</div>
-					<div class="check">
-						<label><input type="checkbox" name="supressAlerts"> Supress warnings and errors via alert</label>
-						<span class="help">Do not show warnings and errors as page alerts.</span>
+					<div class="d-popover pop-plugin" id="pop-plugin" role="dialog" aria-labelledby="pop-plugin-title" hidden>
+						<div class="pop-arrow"></div>
+						<div class="pop-head">
+							<div class="pop-title" id="pop-plugin-title">KeePassHttp plugin</div>
+							<button type="button" class="pop-close" aria-label="Close"></button>
+						</div>
+						<div class="pop-desc">The KeePass side of this connection.</div>
+						<div class="pop-actions">
+							<a class="pop-link" href="https://keepass.info/plugins.html#keepasshttp" target="_blank" rel="noopener noreferrer">Download page</a>
+						</div>
 					</div>
-					<div class="check">
-						<label><input type="checkbox" name="respectMaxLength"> Respect the maxlength attribute of fields</label>
-						<span class="help">Cut filled values to the maximum length the page allows.
-							This can cause problems when a site lowers the limit after you created a password, or when the password in KeePass is longer than the limit.</span>
+				</div>
+
+				<div class="sentence" aria-live="polite">
+					<span class="state-icon" id="state-icon"></span>
+					<div class="sentence-text">
+						<div class="headline" id="headline"></div>
+						<div class="failure" id="failure-line" hidden></div>
+						<div class="subline" id="subline" hidden></div>
+					</div>
+					<button type="button" class="quiet" id="details-toggle" aria-expanded="false" aria-controls="details-line" hidden>Details ▸</button>
+				</div>
+
+				<div class="details-line" id="details-line" hidden></div>
+
+				<div class="note" id="first-fill-note" hidden>
+					<div class="note-text">
+						<span class="note-icon"></span>
+						<div>The first time you fill a site, KeePass asks you to allow it. Tick <b>Remember</b> so it stops asking for that site.</div>
+					</div>
+					<button type="button" class="secondary small" id="note-dismiss">Got it</button>
+				</div>
+
+				<button type="button" class="primary card-action" id="card-action" hidden></button>
+
+				<div class="need" id="need" hidden>
+					<div class="need-title">What you need</div>
+					<div class="need-row" data-row="1">
+						<span class="tick"></span>
+						<div class="need-text"></div>
+					</div>
+					<div class="need-row" data-row="2">
+						<span class="tick"></span>
+						<div class="need-text">KeePass running, with your database open.</div>
+					</div>
+					<div class="need-row" data-row="3">
+						<span class="tick"></span>
+						<div class="need-text"></div>
+					</div>
+				</div>
+
+				<!-- Connection settings (state A only), closed until opened. -->
+				<div class="help" id="help" hidden>
+					<button type="button" class="disclosure" id="help-toggle-row" aria-expanded="false" aria-controls="help-body">Connection settings ▸</button>
+					<div class="help-body" id="help-body" hidden>
+						<p class="help-text">The network port used by the KeePassHttp plugin in KeePass. The default is 19455. You can check your current value by going to KeePass ➡️ Tools ➡️ KeePassHttp Options ➡️ Listener Configuration tab</p>
+						<div class="port-row">
+							<label for="card-port">Port</label>
+							<input type="number" id="card-port" min="1025" max="65535" step="1">
+							<button type="button" class="secondary small port-save">Use this port</button>
+							<span class="port-status" aria-live="polite"></span>
+						</div>
+					</div>
+				</div>
+			</section>
+
+			<div class="tabs" role="tablist" aria-label="Settings sections">
+				<button type="button" role="tab" id="tabbtn-databases" aria-controls="tab-databases" aria-selected="true" data-tab="databases">KeePass Databases</button>
+				<button type="button" role="tab" id="tabbtn-filling" aria-controls="tab-filling" aria-selected="false" tabindex="-1" data-tab="filling">Read from KeePass</button>
+				<button type="button" role="tab" id="tabbtn-saving" aria-controls="tab-saving" aria-selected="false" tabindex="-1" data-tab="saving">Update KeePass</button>
+				<button type="button" role="tab" id="tabbtn-generator" aria-controls="tab-generator" aria-selected="false" tabindex="-1" data-tab="generator">Password generator</button>
+				<button type="button" role="tab" id="tabbtn-about" aria-controls="tab-about" aria-selected="false" tabindex="-1" data-tab="about">About</button>
+			</div>
+
+			<!-- ============================ Databases ============================ -->
+			<section class="tab" id="tab-databases" role="tabpanel" aria-labelledby="tabbtn-databases">
+				<p class="db-empty" id="db-empty" hidden></p>
+
+				<div class="db-list" id="db-list" hidden>
+					<div class="db-head" aria-hidden="true"><div class="db-col-name">Key name</div><div class="db-col-desc">Description</div><div class="db-col-actions"></div></div>
+					<ul class="db-rows" id="db-rows" aria-label="Databases"></ul>
+				</div>
+				<template id="row-database">
+					<li class="db-row">
+						<div class="db-name">
+							<span class="chip chip-list"></span>
+							<div class="db-meta"></div>
+						</div>
+						<input type="text" class="db-desc" maxlength="200" placeholder="optional">
+						<div class="db-actions">
+							<button type="button" class="link-accent db-again" hidden>Give access again</button>
+							<button type="button" class="quiet db-remove">Remove</button>
+						</div>
+					</li>
+				</template>
+
+				<div class="db-more" id="db-more" hidden>
+					<div class="footnotes">
+						<div>KeePass serves the database in its active tab. To set up another database, make it active in KeePass. This page will offer it.</div>
+						<div>To search all open databases at once, turn on “Search in all opened databases” in the KeePassHttp plugin options.</div>
+					</div>
+					<button type="button" class="disclosure quiet-strong" id="advanced-toggle" aria-expanded="false" aria-controls="advanced">Connection settings ▸</button>
+					<div class="advanced-body" id="advanced" hidden>
+						<p class="help-text">The network port used by the KeePassHttp plugin in KeePass. The default is 19455. You can check your current value by going to KeePass ➡️ Tools ➡️ KeePassHttp Options ➡️ Listener Configuration tab</p>
+						<div class="port-row">
+							<label for="advanced-port">Port</label>
+							<input type="number" id="advanced-port" min="1025" max="65535" step="1">
+							<button type="button" class="secondary small port-save">Use this port</button>
+							<span class="port-status" aria-live="polite"></span>
+						</div>
+					</div>
+				</div>
+			</section>
+
+			<!-- ============================ Filling ============================ -->
+			<section class="tab" id="tab-filling" role="tabpanel" aria-labelledby="tabbtn-filling" hidden>
+				<div class="notice" data-notice hidden><span class="notice-icon"></span><div>These settings take effect once KeePass is connected.</div></div>
+
+				<div class="group">
+					<h3>Automatic actions</h3>
+
+					<div class="opt" data-setting="autoRetrieveCredentials" data-type="bool" data-default="true">
+						<div class="opt-head">
+							<label class="opt-title" for="opt-autoRetrieveCredentials">Ask KeePass for logins when a page opens</label>
+							<button type="button" class="info" aria-expanded="false" aria-controls="info-autoRetrieveCredentials" aria-label="More information">i</button>
+						</div>
+						<div class="opt-body">
+							<label class="switch"><input type="checkbox" id="opt-autoRetrieveCredentials"><span class="slider"></span></label>
+							<p class="opt-desc">When a page with a login form opens, the extension asks KeePass for matching logins at once.</p>
+							<p class="opt-meta"></p>
+						</div>
+						<div class="opt-info" id="info-autoRetrieveCredentials" hidden>
+							<p>With this on, every page that has a login form causes one request to KeePass. KeePass may show its access dialog, unless "Always allow access" is on in the plugin options.</p>
+							<p>With this off, the extension asks KeePass only when you press a keyboard shortcut. The two options below then do nothing until that moment, because they need the list of logins.</p>
+							<p>The list of logins is kept only while the tab is active. It is cleared when you switch tab, reload the page, or lock KeePass.</p>
+						</div>
+					</div>
+
+					<div class="opt child" data-setting="autoCompleteUsernames" data-type="bool" data-default="true" data-parent="autoRetrieveCredentials">
+						<div class="opt-head">
+							<label class="opt-title" for="opt-autoCompleteUsernames">Show a list of logins under the username field</label>
+							<button type="button" class="info" aria-expanded="false" aria-controls="info-autoCompleteUsernames" aria-label="More information">i</button>
+						</div>
+						<div class="opt-body">
+							<label class="switch"><input type="checkbox" id="opt-autoCompleteUsernames"><span class="slider"></span></label>
+							<p class="opt-desc">Click a username field to see the logins KeePass found. Pick one to fill username and password.</p>
+							<p class="opt-meta"></p>
+						</div>
+						<div class="opt-info" id="info-autoCompleteUsernames" hidden>
+							<p>The list appears only when KeePass found at least one login for the page. Use the arrow keys and Enter, or the mouse.</p>
+							<p>On a page without https, the list is red and shows a warning. You can still pick a login, but nothing is filled on its own.</p>
+							<p>Needs "Ask KeePass for logins when a page opens". Without it, the list appears only after a shortcut fetched the logins.</p>
+						</div>
+					</div>
+
+					<div class="opt child" data-setting="autoFillSingleEntry" data-type="bool" data-default="false" data-parent="autoRetrieveCredentials">
+						<div class="opt-head">
+							<label class="opt-title" for="opt-autoFillSingleEntry">Fill the login without asking when KeePass has exactly one</label>
+							<button type="button" class="info" aria-expanded="false" aria-controls="info-autoFillSingleEntry" aria-label="More information">i</button>
+						</div>
+						<div class="opt-body">
+							<label class="switch"><input type="checkbox" id="opt-autoFillSingleEntry"><span class="slider"></span></label>
+							<p class="opt-desc">If KeePass returns one login for the page, it is filled into the form at once.</p>
+							<p class="opt-meta"></p>
+						</div>
+						<div class="opt-info" id="info-autoFillSingleEntry" hidden>
+							<p>Only when exactly one login matches. With two or more, nothing is filled and you choose from the list or the toolbar icon.</p>
+							<p>Never on a page without https, and never when the form sends to an address without https. On such pages you must pick the login yourself.</p>
+							<p>Needs "Ask KeePass for logins when a page opens".</p>
+						</div>
+					</div>
+				</div>
+
+				<div class="group">
+					<div class="group-head">
+						<h3>Keyboard shortcuts</h3>
+						<button type="button" class="info" aria-expanded="false" aria-controls="info-shortcuts" aria-label="More information about the shortcuts">i</button>
+					</div>
+					<p class="group-desc">Press a shortcut while the cursor is in a login form.</p>
+					<div class="opt-info" id="info-shortcuts" hidden>
+						<p>The shortcuts work in the focused form. If the cursor is not in a field, the first login form on the page is used.</p>
+						<p>With one matching login, the fields are filled at once. With several, the extension looks at the username already typed: if exactly one login has that username, it is filled. Otherwise a message asks you to choose from the toolbar icon.</p>
+						<p>The shortcuts are managed by Firefox. You can change them, or they may be taken by another extension.</p>
+					</div>
+					<ul class="shortcuts" id="shortcut-list">
+						<li><span class="shortcut-name">Fill username and password</span><span class="keys" data-command="fill-username-password"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd></span></li>
+						<li><span class="shortcut-name">Fill the password only</span><span class="keys" data-command="fill-password"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd></span></li>
+					</ul>
+					<p class="actions-left">
+						<button type="button" id="change-shortcuts" hidden>Change shortcuts</button>
+						<span class="muted" id="shortcut-help">To change them: open <code>about:addons</code>, click the gear icon, then <em>Manage Extension Shortcuts</em>.</span>
+					</p>
+
+					<div class="opt" data-setting="supressAlerts" data-type="bool" data-invert="1" data-default="false">
+						<div class="opt-head">
+							<label class="opt-title" for="opt-supressAlerts">Show a message when a shortcut cannot fill</label>
+							<button type="button" class="info" aria-expanded="false" aria-controls="info-supressAlerts" aria-label="More information">i</button>
+						</div>
+						<div class="opt-body">
+							<label class="switch"><input type="checkbox" id="opt-supressAlerts"><span class="slider"></span></label>
+							<p class="opt-desc">A small box at the top right of the page tells you why nothing was filled. It closes on its own.</p>
+							<p class="opt-meta"></p>
+						</div>
+						<div class="opt-info" id="info-supressAlerts" hidden>
+							<p>The box appears for these cases:</p>
+							<ul>
+								<li>KeePass has no login for this page.</li>
+								<li>KeePass has several logins and none matches the typed username.</li>
+								<li>No password field was found next to the cursor.</li>
+								<li>The fields could not be filled, for example because the page replaced them.</li>
+							</ul>
+							<p>With this off, the same text goes to the browser console only.</p>
+						</div>
+					</div>
+				</div>
+
+				<div class="group" id="http-auth-options">
+					<h3>Browser login dialogs</h3>
+					<div class="opt" data-setting="autoFillAndSend" data-type="bool" data-default="false">
+						<div class="opt-head">
+							<label class="opt-title" for="opt-autoFillAndSend">Answer the browser's own login dialog with KeePass</label>
+							<button type="button" class="info" aria-expanded="false" aria-controls="info-autoFillAndSend" aria-label="More information">i</button>
+						</div>
+						<div class="opt-body">
+							<label class="switch"><input type="checkbox" id="opt-autoFillAndSend"><span class="slider"></span></label>
+							<p class="opt-desc">Some sites ask for a login in a window of the browser itself (HTTP authentication, picture below). With this on, KeePass answers it.</p>
+							<p class="opt-meta"></p>
+						</div>
+						<div class="opt-info" id="info-autoFillAndSend" hidden>
+							<p>What happens when such a window would open:</p>
+							<ul>
+								<li>Page with https and exactly one login in KeePass: the login is sent at once. You see no window.</li>
+								<li>Page with https and several logins: a popup lets you choose one.</li>
+								<li>Page without https: a popup always asks you first, because the login would travel unencrypted.</li>
+								<li>No login in KeePass: the normal browser window appears.</li>
+							</ul>
+							<p>Security note: with this on, the extension watches every request for such windows. Keep it off if you do not use sites with this kind of login.</p>
+						</div>
+						<img class="example" src="/options/http-auth-dialog.png" alt="Example of a browser login dialog">
+					</div>
+				</div>
+
+				<div class="group">
+					<div class="group-head">
+						<h3>Sites where you chose the fields yourself</h3>
+						<button type="button" class="info" aria-expanded="false" aria-controls="info-fields" aria-label="More information about chosen fields">i</button>
+					</div>
+					<p class="group-desc">On these sites the extension uses the fields you selected instead of detecting them.</p>
+					<div class="opt-info" id="info-fields" hidden>
+						<p>Sometimes the extension picks the wrong fields on a page, or it finds none. Then you can select them yourself: open the page, click the toolbar icon, and press <em>Choose own credential fields for this page</em>. Click the username field, the password field, and any extra fields.</p>
+						<p>The choice is saved for the site (its address without the path). Remove a site here to go back to automatic detection the next time the page opens.</p>
+					</div>
+					<table id="fields-table">
+						<thead>
+							<tr>
+								<th>Site</th>
+								<th></th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr class="empty">
+								<td colspan="2">No site with chosen fields.</td>
+							</tr>
+						</tbody>
+					</table>
+					<template id="row-specified-fields">
+						<tr>
+							<td class="url"></td>
+							<td><button type="button" class="delete danger small">Remove</button></td>
+						</tr>
+					</template>
+				</div>
+
+				<details class="advanced">
+					<summary>Advanced</summary>
+					<div class="opt" data-setting="respectMaxLength" data-type="bool" data-default="false">
+						<div class="opt-head">
+							<label class="opt-title" for="opt-respectMaxLength">Cut values to the maximum length of the field</label>
+							<button type="button" class="info" aria-expanded="false" aria-controls="info-respectMaxLength" aria-label="More information">i</button>
+						</div>
+						<div class="opt-body">
+							<label class="switch"><input type="checkbox" id="opt-respectMaxLength"><span class="slider"></span></label>
+							<p class="opt-desc">If a field has a length limit, the filled value is cut to that limit.</p>
+							<p class="opt-meta"></p>
+						</div>
+						<div class="opt-info" id="info-respectMaxLength" hidden>
+							<p>Pages can set a maximum length on a field (the <code>maxlength</code> attribute). By default the extension ignores it and fills the full value, as the browser lets scripts do.</p>
+							<p>Turn this on only if a site rejects long values. Risk: a password longer than the limit is cut, and the login fails without a clear reason.</p>
+						</div>
 					</div>
 				</details>
 			</section>
 
-			<!-- Connected Databases -->
-			<section class="tab" id="tab-connected-databases" role="tabpanel" hidden>
-				<h2>Connected Databases</h2>
-				<p>If you use several KeePass databases, give each one its own toolbar icon color. Then you see at a glance which database the logins come from.</p>
-				<table>
-					<thead>
-						<tr>
-							<th>Identifier</th>
-							<th>Icon color</th>
-							<th>Last used</th>
-							<th>Created</th>
-							<th>Delete</th>
-						</tr>
-					</thead>
-					<tbody>
-						<tr class="empty">
-							<td colspan="5">No connected databases found.</td>
-						</tr>
-					</tbody>
-				</table>
-				<template id="row-connected-database">
-					<tr>
-						<td class="identifier"></td>
-						<td><div class="kph-color"></div></td>
-						<td class="last-used nowrap"></td>
-						<td class="created nowrap"></td>
-						<td><button type="button" class="delete danger">Remove</button></td>
-					</tr>
-				</template>
-				<p class="actions" style="text-align: right">
-					<button id="connect-button" type="button" class="primary">Connect</button>
+			<!-- ============================ Saving ============================ -->
+			<section class="tab" id="tab-saving" role="tabpanel" aria-labelledby="tabbtn-saving" hidden>
+				<div class="notice" data-notice hidden><span class="notice-icon"></span><div>These settings take effect once KeePass is connected.</div></div>
+				<p class="intro">
+					When you submit a login form with a username or password that KeePass does not have, the toolbar icon blinks and offers to save it.
+					Click the icon to create a new entry or update an existing one. The settings below control how long this offer stays open.
 				</p>
-				<dialog id="dialogDeleteConnectedDatabase" aria-labelledby="dialogDeleteConnectedDatabaseTitle">
-					<form method="dialog">
-						<h3 id="dialogDeleteConnectedDatabaseTitle">Remove identifier from browser?</h3>
-						<p>Do you really want to remove the identifier <strong class="name"></strong> from this browser?</p>
-						<p class="help">You can connect your database again at any time.</p>
-						<div class="actions">
-							<button value="cancel">Cancel</button>
-							<button value="yes" class="primary">Yes, remove now</button>
+
+				<div class="opt" data-setting="blinkTimeout" data-type="seconds" data-default="7500" data-min="0" data-max="600000">
+					<div class="opt-head">
+						<label class="opt-title" for="opt-blinkTimeout">Keep the save offer open for</label>
+						<button type="button" class="info" aria-expanded="false" aria-controls="info-blinkTimeout" aria-label="More information">i</button>
+					</div>
+					<div class="opt-body">
+						<div class="row">
+							<input type="number" id="opt-blinkTimeout" min="0" max="600" step="0.5"><span class="unit">seconds</span>
+							<span class="status" aria-live="polite"></span>
 						</div>
-					</form>
-				</dialog>
+						<p class="opt-desc">After this time the offer closes and the typed password is forgotten.</p>
+						<p class="opt-meta"></p>
+					</div>
+					<div class="opt-info" id="info-blinkTimeout" hidden>
+						<p>The time counts only while the tab with the form is the active tab. Switching to another tab closes the offer at once.</p>
+						<p>Whatever you set, the extension forgets the password at the latest after this time plus 60 seconds, and never later than 10 minutes. This is a fixed safety limit.</p>
+						<p>A value of 0 closes the offer right away, so saving is not possible.</p>
+					</div>
+				</div>
+
+				<details class="advanced">
+					<summary>Advanced: close the offer when the page changes</summary>
+					<p class="intro">
+						After a login, many sites load one or more new pages (redirects). By default these page changes do not close the offer, only the time does.
+						The options below let page changes close it earlier. They are for advanced users; the default behavior works for most sites.
+					</p>
+
+					<div class="opt" data-setting="blinkMinTimeout" data-type="offset-toggle" data-default="-1">
+						<div class="opt-head">
+							<label class="opt-title" for="opt-blinkMinTimeout-on">Close the offer after page changes</label>
+							<button type="button" class="info" aria-expanded="false" aria-controls="info-redirects" aria-label="More information">i</button>
+						</div>
+						<div class="opt-body">
+							<label class="switch"><input type="checkbox" id="opt-blinkMinTimeout-on"><span class="slider"></span></label>
+							<p class="opt-desc">Count the pages the tab loads after the login, and close the offer when there are too many.</p>
+							<p class="opt-meta"></p>
+						</div>
+						<div class="opt-info" id="info-redirects" hidden>
+							<p>How the counting works, step by step:</p>
+							<ol>
+								<li>You submit the login form. The offer opens and the clock starts.</li>
+								<li>During the first <em>ignored seconds</em>, page loads are not counted. This covers the redirects that follow a login.</li>
+								<li>After that, every finished page load counts as one page change.</li>
+								<li>When the count goes above the <em>allowed page changes</em>, the next page load closes the offer.</li>
+							</ol>
+							<p>Example with 2 ignored seconds and 1 allowed change: the login page redirects twice within 2 seconds (not counted). You then open another page on the site (change 1, still allowed). You open one more page: the offer closes.</p>
+							<p>The time limit above still applies. The offer closes at whichever comes first.</p>
+							<p>With this off, the stored value is -1, which older versions used for "ignore page changes".</p>
+						</div>
+					</div>
+
+					<div class="opt child" data-setting="blinkMinTimeout" data-type="seconds" data-default="2000" data-min="0" data-max="600000" data-parent-offset="1">
+						<div class="opt-head">
+							<label class="opt-title" for="opt-blinkMinTimeout">Ignore page changes during the first</label>
+						</div>
+						<div class="opt-body">
+							<div class="row">
+								<input type="number" id="opt-blinkMinTimeout" min="0" max="600" step="0.5"><span class="unit">seconds</span>
+								<span class="status" aria-live="polite"></span>
+							</div>
+							<p class="opt-desc">Page loads in this time after the login are not counted. 0 counts from the first page load.</p>
+							<p class="opt-meta"></p>
+						</div>
+					</div>
+
+					<div class="opt child" data-setting="allowedRedirect" data-type="int" data-default="1" data-min="0" data-max="100" data-parent-offset="1">
+						<div class="opt-head">
+							<label class="opt-title" for="opt-allowedRedirect">Allowed page changes</label>
+						</div>
+						<div class="opt-body">
+							<div class="row">
+								<input type="number" id="opt-allowedRedirect" min="0" max="100" step="1"><span class="unit">pages</span>
+								<span class="status" aria-live="polite"></span>
+							</div>
+							<p class="opt-desc">How many counted page changes are allowed before the offer closes. 0 closes it at the first counted change.</p>
+							<p class="opt-meta"></p>
+						</div>
+					</div>
+				</details>
 			</section>
 
-			<!-- Specified credential fields -->
-			<section class="tab" id="tab-specified-fields" role="tabpanel" hidden>
-				<h2>Specified credential fields</h2>
-				<p>
-					If KeePassHttp-Neo detects the wrong fields on a page, you can choose them yourself:
-					open the page, click the KeePassHttp-Neo toolbar icon, then <em>Choose own credential fields for this page</em>.
-					Here you can remove these choices.
-				</p>
-				<table>
-					<thead>
-						<tr>
-							<th>Page URL</th>
-							<th>Delete</th>
-						</tr>
-					</thead>
-					<tbody>
-						<tr class="empty">
-							<td colspan="2">No specified credential fields found.</td>
-						</tr>
-					</tbody>
-				</table>
-				<template id="row-specified-fields">
-					<tr>
-						<td class="url"></td>
-						<td><button type="button" class="delete danger">Remove</button></td>
-					</tr>
-				</template>
-				<dialog id="dialogDeleteSpecifiedCredentialFields" aria-labelledby="dialogDeleteSpecifiedCredentialFieldsTitle">
-					<form method="dialog">
-						<h3 id="dialogDeleteSpecifiedCredentialFieldsTitle">Remove specified credential fields?</h3>
-						<p>Do you really want to remove the specified credential fields for <strong class="name"></strong>?</p>
-						<p class="help">KeePassHttp-Neo will detect the fields automatically the next time you open this page.</p>
-						<div class="actions">
-							<button value="cancel">Cancel</button>
-							<button value="yes" class="primary">Yes, remove now</button>
-						</div>
-					</form>
-				</dialog>
+			<!-- ============================ Password generator ============================ -->
+			<section class="tab" id="tab-generator" role="tabpanel" aria-labelledby="tabbtn-generator" hidden>
+				<div class="notice" data-notice hidden><span class="notice-icon"></span><div>These settings take effect once KeePass is connected.</div></div>
+
+				<div class="opt" data-setting="usePasswordGenerator" data-type="bool" data-default="true">
+					<div class="opt-head">
+						<label class="opt-title" for="opt-usePasswordGenerator">Show a key icon in password fields</label>
+						<button type="button" class="info" aria-expanded="false" aria-controls="info-usePasswordGenerator" aria-label="More information">i</button>
+					</div>
+					<div class="opt-body">
+						<label class="switch"><input type="checkbox" id="opt-usePasswordGenerator"><span class="slider"></span></label>
+						<p class="opt-desc">Click the icon to let KeePass generate a new password and put it into the field.</p>
+						<p class="opt-meta"></p>
+					</div>
+					<div class="opt-info" id="info-usePasswordGenerator" hidden>
+						<p>The password is made by KeePass, with the generator profile that KeePass uses for new entries (KeePass: Tools, Generate Password, profile "(Automatically generated passwords for new entries)"). Change length and characters there.</p>
+						<p>The dialog on the page offers two actions: copy the password to the clipboard, or fill it in and copy. After 30 seconds the extension clears the clipboard again, unless you copied something else in the meantime.</p>
+						<p>The generated password is not saved in KeePass by itself. After you submit the form, the save offer appears (see Update KeePass).</p>
+					</div>
+				</div>
 			</section>
 
-			<!-- About -->
-			<section class="tab" id="tab-about" role="tabpanel" hidden>
-				<h2>About</h2>
+			<!-- ============================ About ============================ -->
+			<section class="tab" id="tab-about" role="tabpanel" aria-labelledby="tabbtn-about" hidden>
 				<p>
-					KeePassHttp-Neo is a modified version of
+					KeePassHttp-Link is a modified version of
 					<a target="_blank" rel="noopener noreferrer" href="https://github.com/smorks/keepasshttp-connector">KeePassHttp-Connector</a>
 					by Andy Brandt (smorks), based on chromeIPass and PassIFox by Perry Nguyen and Lukas Schulze,
 					with WebExtension work by Angus Gratton. License: GNU GPL v3.
 				</p>
 				<p>
-					<a target="_blank" rel="noopener noreferrer" href="https://github.com/odyodyodys/keepasshttp-neo">Project page on GitHub</a>
+					<a target="_blank" rel="noopener noreferrer" href="https://github.com/odyodyodys/keepasshttp-link">Project page on GitHub</a>
+				</p>
+				<p>
+					It needs the KeePassHttp plugin in KeePass, tested with version 2.3.1.0 from
+					<a target="_blank" rel="noopener noreferrer" href="https://github.com/alan-null/keepasshttp">github.com/alan-null/keepasshttp</a>.
 				</p>
 				<hr>
 				<dl class="versions">
-					<dt>KeePassHttp-Neo version:</dt>
+					<dt>KeePassHttp-Link version:</dt>
 					<dd><em class="versionCIP"></em></dd>
-					<dt>KeePassHttp version:</dt>
+					<dt>KeePassHttp plugin version:</dt>
 					<dd><em class="versionKPH"></em></dd>
 				</dl>
+				<p class="credits">Based on work by Perry Nguyen, Lukas Schulze, Angus Gratton and Andy Brandt.</p>
 			</section>
-
-			<footer>
-				Based on work by Perry Nguyen, Lukas Schulze, Angus Gratton and Andy Brandt.
-			</footer>
 		</div>
+
+		<dialog id="dialogRemoveDatabase" aria-labelledby="dialogRemoveDatabaseTitle">
+			<form method="dialog">
+				<h3 id="dialogRemoveDatabaseTitle">Remove <span class="name"></span> from Firefox?</h3>
+				<p>Firefox loses access until you set it up again. KeePass keeps its KeePassHttp entry, delete it there to revoke fully.</p>
+				<div class="actions">
+					<button value="yes" class="danger">Remove</button>
+					<button value="cancel" autofocus>Keep</button>
+				</div>
+			</form>
+		</dialog>
+
+		<dialog id="dialogDeleteSpecifiedCredentialFields" aria-labelledby="dialogDeleteSpecifiedCredentialFieldsTitle">
+			<form method="dialog">
+				<h3 id="dialogDeleteSpecifiedCredentialFieldsTitle">Remove the chosen fields?</h3>
+				<p>The fields you chose for <strong class="name"></strong> are removed.</p>
+				<p class="help">The extension will detect the fields on its own the next time you open this site.</p>
+				<div class="actions">
+					<button value="cancel">Cancel</button>
+					<button value="yes" class="danger">Remove</button>
+				</div>
+			</form>
+		</dialog>
 	</body>
 </html>

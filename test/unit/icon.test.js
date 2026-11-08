@@ -1,34 +1,43 @@
-// Toolbar icon colors: only preset ids and "#rrggbb" are accepted.
+// Toolbar icon: one fixed color set (the design files toolbar-*-{light,dark}.svg),
+// no per-database color.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadBackground } from './helpers.js';
 
-const { kphIcon } = loadBackground(['background/icon.js'], {}, ['kphIcon']);
+class FakePath2D { constructor(d) { this.d = d; } }
 
-test('preset ids, old "-inverse" names and hex colors are kept', () => {
-  assert.equal(kphIcon.normalize('blue'), 'blue');
-  assert.equal(kphIcon.normalize(' Green '), 'green');
-  assert.equal(kphIcon.normalize('purple-inverse'), 'purple');
-  assert.equal(kphIcon.normalize('#A1b2C3'), '#a1b2c3');
+function paintLog(state, dark) {
+  const { kphIcon } = loadBackground(['background/icon.js'], { Path2D: FakePath2D }, ['kphIcon']);
+  const fills = [];
+  const ctx = {
+    set fillStyle(v) { this._fill = v; },
+    fill(path) { fills.push({ color: this._fill, d: path.d }); },
+    stroke(path) { fills.push({ color: this.strokeStyle, d: path.d, stroke: true }); },
+  };
+  kphIcon.paint(ctx, state, dark);
+  return { kphIcon, fills };
+}
+
+test('the four states exist', () => {
+  const { kphIcon } = loadBackground(['background/icon.js'], {}, ['kphIcon']);
+  assert.deepEqual([...kphIcon.STATES].sort(), ['choose', 'normal', 'off', 'save']);
 });
 
-test('anything else falls back to the default', () => {
-  for (const bad of [undefined, null, 42, {}, '', 'teal', '#fff', '#12345g', '#1234567',
-    'red;background:url(x)', 'url(https://example.invalid/x.png)', '#ff00aa"><script>']) {
-    assert.equal(kphIcon.normalize(bad), 'blue', String(bad));
-  }
+test('normal: blue on a light toolbar, light blue on a dark toolbar', () => {
+  assert.ok(paintLog('normal', false).fills.every((f) => f.color === '#1d4ed8'));
+  assert.ok(paintLog('normal', true).fills.every((f) => f.color === '#60a5fa'));
 });
 
-test('presets have a light and a dark tone; a custom color is the same on both', () => {
-  assert.equal(kphIcon.colorFor('blue', false), '#1d4ed8');
-  assert.equal(kphIcon.colorFor('blue', true), '#60a5fa');
-  assert.equal(kphIcon.colorFor('#ff00aa', false), '#ff00aa');
-  assert.equal(kphIcon.colorFor('#ff00aa', true), '#ff00aa');
-  assert.equal(kphIcon.colorFor('bogus', false), '#1d4ed8');
+test('off: grey key with a badge and a cross; save: red badge', () => {
+  const off = paintLog('off', false).fills;
+  assert.equal(off[0].color, '#8f8f9d');
+  assert.ok(off.some((f) => f.stroke));
+  const save = paintLog('save', false).fills;
+  assert.ok(save.some((f) => f.color === '#dc2626'));
 });
 
-test('every preset color is a valid hex color', () => {
-  for (const p of kphIcon.presets) {
-    assert.ok(kphIcon.isHex(p.light) && kphIcon.isHex(p.dark), p.id);
-  }
+test('no per-database color any more', () => {
+  const { kphIcon } = loadBackground(['background/icon.js'], {}, ['kphIcon']);
+  assert.equal(kphIcon.presets, undefined);
+  assert.equal(kphIcon.normalize, undefined);
 });

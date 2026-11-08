@@ -5,10 +5,11 @@ import crypto from 'node:crypto';
 
 // "locked": every request gets HTTP 503, as KeePassHttp answers when the
 // database is locked (KeePassHttp.cs: StatusCode = ServiceUnavailable).
-export const TAMPER_MODES = ['none', 'hmac-missing', 'hmac-bad', 'nonce-swap', 'locked'];
+// "slow": every answer comes after 3 s (a busy or slow KeePass).
+export const TAMPER_MODES = ['none', 'hmac-missing', 'hmac-bad', 'nonce-swap', 'locked', 'slow'];
 
 export function tamper(mode, res) {
-  if (!res || res.Success !== true || mode === 'none' || mode === 'locked') return res;
+  if (!res || res.Success !== true || mode === 'none' || mode === 'locked' || mode === 'slow') return res;
   switch (mode) {
     case 'hmac-missing':
       delete res.Hmac;

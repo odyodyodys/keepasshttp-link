@@ -1,66 +1,15 @@
-// Toolbar icon, drawn at runtime from the 16x16 design paths
-// (documentation/images/icons/) in the color chosen for each connected
-// database. Used by the background page and by the settings page.
-//
-// A color is either a preset id ("blue", ...) or "#rrggbb". Anything else
-// falls back to the default. The value is only used as a canvas fill color,
-// never inserted into HTML or CSS text.
+// Toolbar icon, drawn at runtime from the 16x16 design paths. The shapes and
+// colors are the ones of the design files toolbar-{normal,choose,off,save}-
+// {light,dark}.svg. Drawn (not loaded from files) so that the light or dark
+// variant follows the browser theme for every tab.
 
 var kphIcon = {};
 
-kphIcon.DEFAULT = "blue";
-
-// Each preset has a tone for light toolbars and one for dark toolbars.
-kphIcon.presets = [
-	{ id: "blue",   light: "#1d4ed8", dark: "#60a5fa" },
-	{ id: "purple", light: "#7c3aed", dark: "#a78bfa" },
-	{ id: "green",  light: "#15803d", dark: "#4ade80" },
-	{ id: "red",    light: "#b91c1c", dark: "#f87171" },
-	{ id: "orange", light: "#c2410c", dark: "#fb923c" },
-	{ id: "yellow", light: "#a16207", dark: "#facc15" },
-	{ id: "aqua",   light: "#0e7490", dark: "#22d3ee" },
-	{ id: "pink",   light: "#be185d", dark: "#f472b6" },
-	{ id: "grey",   light: "#4b5563", dark: "#9ca3af" }
-];
-
 kphIcon.STATES = ["normal", "choose", "off", "save"];
 
-kphIcon.preset = function(id) {
-	for(var i = 0; i < kphIcon.presets.length; i++) {
-		if(kphIcon.presets[i].id === id) {
-			return kphIcon.presets[i];
-		}
-	}
-	return null;
-};
-
-kphIcon.isHex = function(value) {
-	return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
-};
-
-// Returns a valid stored value: a preset id or a lower-case "#rrggbb".
-// Old values such as "green-inverse" map to their preset.
-kphIcon.normalize = function(value) {
-	if(typeof value !== "string") {
-		return kphIcon.DEFAULT;
-	}
-	var v = value.trim().toLowerCase();
-	if(kphIcon.isHex(v)) {
-		return v;
-	}
-	v = v.replace(/-inverse$/, "");
-	return kphIcon.preset(v) ? v : kphIcon.DEFAULT;
-};
-
-// The fill color for a stored value. A custom color is the same on both toolbars.
-kphIcon.colorFor = function(value, dark) {
-	var v = kphIcon.normalize(value);
-	if(v.charAt(0) === "#") {
-		return v;
-	}
-	var p = kphIcon.preset(v);
-	return dark ? p.dark : p.light;
-};
+// Key color on a light and on a dark toolbar.
+kphIcon.LIGHT = "#1d4ed8";
+kphIcon.DARK = "#60a5fa";
 
 kphIcon.isDarkToolbar = function() {
 	try {
@@ -82,9 +31,9 @@ kphIcon.PATHS = {
 };
 
 // Draws one state on a 2D context, in 16x16 units (scale the context first).
-kphIcon.paint = function(ctx, state, value, dark) {
+kphIcon.paint = function(ctx, state, dark) {
 	var P = kphIcon.PATHS;
-	var key = (state === "off") ? "#8f8f9d" : kphIcon.colorFor(value, dark);
+	var key = (state === "off") ? "#8f8f9d" : (dark ? kphIcon.DARK : kphIcon.LIGHT);
 	var fill = function(d, color, rule) {
 		ctx.fillStyle = color;
 		ctx.fill(new Path2D(d), rule || "nonzero");
@@ -115,7 +64,7 @@ kphIcon.paint = function(ctx, state, value, dark) {
 };
 
 // ImageData for browserAction.setIcon, for 16 and 32 px.
-kphIcon.imageData = function(state, value) {
+kphIcon.imageData = function(state) {
 	var dark = kphIcon.isDarkToolbar();
 	var out = {};
 	[16, 32].forEach(function(size) {
@@ -124,7 +73,7 @@ kphIcon.imageData = function(state, value) {
 		canvas.height = size;
 		var ctx = canvas.getContext("2d");
 		ctx.scale(size / 16, size / 16);
-		kphIcon.paint(ctx, state, value, dark);
+		kphIcon.paint(ctx, state, dark);
 		out[size] = ctx.getImageData(0, 0, size, size);
 	});
 	return out;

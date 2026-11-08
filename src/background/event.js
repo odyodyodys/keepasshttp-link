@@ -8,7 +8,7 @@ cipevent.onMessage = function(request, sender, callback) {
 
 	var kind = senderPolicy.classify(sender, browser.runtime.id, browser.runtime.getURL(""));
 	if(!senderPolicy.isAllowed(kind, request.action)) {
-		console.log("KeePassHttp-Neo: message '" + request.action + "' refused from " + (kind || "unknown sender"));
+		console.log("KeePassHttp-Link: message '" + request.action + "' refused from " + (kind || "unknown sender"));
 		return;
 	}
 
@@ -53,7 +53,7 @@ cipevent.onContentMessage = function(request, sender, callback) {
 	}
 
 	if(senderPolicy.topOriginOnlyActions[request.action] && senderPolicy.isCrossOriginFrame(sender)) {
-		console.log("KeePassHttp-Neo: '" + request.action + "' refused for a cross-origin iframe");
+		console.log("KeePassHttp-Link: '" + request.action + "' refused for a cross-origin iframe");
 		if(request.action === "retrieve_credentials") {
 			callback([]);
 			return true;
@@ -192,9 +192,16 @@ cipevent.invoke = function(handler, callback, senderTabId, args, secondTime) {
 	});
 }
 
+// The content script shows its own notification (cip.notify). This action is
+// kept for old content scripts and only logs.
 cipevent.onShowAlert = function(callback, tab, message) {
-	if( page.settings.supressAlerts === true ){ console.log(message); }
-	else { browser.tabs.executeScript(tab.id, {code: 'alert(' + JSON.stringify(String(message)) + ')'}); }
+	console.log("KeePassHttp-Link: " + message);
+}
+
+// Settings page: test the connection, with the KeePass unlock prompt if asked,
+// or (cached) only report the last known state.
+cipevent.onCheckConnection = function(callback, tab, triggerUnlock, cached) {
+	keepass.checkConnection(callback, tab, triggerUnlock === true, cached === true);
 }
 
 cipevent.onLoadSettings = function(callback, tab) {
@@ -205,23 +212,54 @@ cipevent.onLoadSettings = function(callback, tab) {
 	});
 }
 
+// Settings page: the key ring without the keys.
 cipevent.onLoadKeyRing = function(callback, tab) {
-	browser.storage.local.get({'keyRing': {}}).then(function(item) {
-		if(keepass.dropWeakKeys(item.keyRing) > 0) {
-			browser.storage.local.set({'keyRing': item.keyRing});
-		}
-		keepass.keyRing = item.keyRing;
-		if(keepass.isAssociated() && !keepass.keyRing[keepass.associated.hash]) {
+	keepass.loadKeyRing().then(function() {
+		// The entry was removed, or marked lost (a weak key): the association
+		// in memory must not be used any more.
+		var entry = keepass.keyRing[keepass.associated.hash];
+		if(keepass.isAssociated() && (!entry || entry.status === "lost")) {
 			keepass.associated = {
 				"value": false,
 				"hash": null
 			};
 		}
 		browserAction.refreshAll();
-		callback(item.keyRing);
+		callback(keepass.publicKeyRing());
 	}, (err) => {
 		console.log('error loading keyRing: ' + err);
 	});
+}
+
+// Settings page: "Give Firefox access" / "Give access again" (hash of the
+// known database, or nothing).
+cipevent.onAssociate = function(callback, tab, expectedHash) {
+	keepass.associate(callback, tab, typeof expectedHash === "string" ? expectedHash : null);
+}
+
+cipevent.onCancelAssociate = function(callback, tab) {
+	keepass.cancelAssociate(callback);
+}
+
+// Settings page: "Remove" (the only way an entry is deleted).
+cipevent.onRemoveKey = function(callback, tab, hash) {
+	if(typeof hash !== "string" || !(hash in keepass.keyRing)) {
+		callback(false);
+		return;
+	}
+	keepass.removeKey(hash).then(function() {
+		browserAction.refreshAll();
+		callback(true);
+	});
+}
+
+// Settings page: description, or "Got it" on the one-time note.
+cipevent.onUpdateKeyEntry = function(callback, tab, hash, change) {
+	if(typeof hash !== "string") {
+		callback(false);
+		return;
+	}
+	keepass.updateKeyEntry(hash, change).then(callback);
 }
 
 // Content script: save or discard ("fields" = null) the user-chosen
@@ -281,9 +319,10 @@ cipevent.onGetTabInformation = function(callback, tab) {
 }
 
 cipevent.onGetConnectedDatabase = function(callback, tab) {
+	var entry = keepass.keyRing[keepass.associated.hash];
 	callback({
 		"count": Object.keys(keepass.keyRing).length,
-		"identifier": (keepass.keyRing[keepass.associated.hash]) ? keepass.keyRing[keepass.associated.hash].id : null
+		"identifier": entry ? entry.id : null
 	});
 }
 
@@ -362,7 +401,9 @@ cipevent.initHttpAuth = function(callback) {
 cipevent.messageHandlers = {
 	'add_credentials': keepass.addCredentials,
 	'alert': cipevent.onShowAlert,
-	'associate': keepass.associate,
+	'associate': cipevent.onAssociate,
+	'cancel_associate': cipevent.onCancelAssociate,
+	'check_connection': cipevent.onCheckConnection,
 	'get_connected_database': cipevent.onGetConnectedDatabase,
 	'get_keepasshttp_versions': cipevent.onGetKeePassHttpVersions,
 	'get_status': cipevent.onGetStatus,
@@ -374,6 +415,8 @@ cipevent.messageHandlers = {
 	'pop_stack': cipevent.onPopStack,
 	'popup_login': cipevent.onLoginPopup,
 	'popup_multiple-fields': cipevent.onMultipleFieldsPopup,
+	'remove_key': cipevent.onRemoveKey,
+	'update_key_entry': cipevent.onUpdateKeyEntry,
 	'remove_credentials_from_tab_information': cipevent.onRemoveCredentialsFromTabInformation,
 	'retrieve_credentials': keepass.retrieveCredentials,
 	'show_default_browseraction': browserAction.showDefault,

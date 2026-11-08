@@ -1,7 +1,7 @@
 {
   "name": "keepasshttp-connector-tests",
   "private": true,
-  "description": "Tests for KeePassHttp-Neo (Firefox only). Not shipped with the extension.",
+  "description": "Tests for KeePassHttp-Link (Firefox only). Not shipped with the extension.",
   "type": "module",
   "scripts": {
     "lint:ext": "web-ext lint --source-dir ../src",

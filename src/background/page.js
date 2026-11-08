@@ -36,11 +36,26 @@ page.initSettings = function() {
 			if(!("port" in page.settings) || keepass.parsePort(page.settings.port) === null) {
 				page.settings.port = String(keepass.defaultPort);
 			}
-			if(!("supressAlerts" in page.settings)) {
-				page.settings.supressAlerts = true;
+			// Messages for a failed shortcut fill are shown by default (in-page
+			// notification). Older versions hid them by default, so turn them on
+			// once for existing settings (marker alertsDefaultOn). The user can
+			// turn them off again in the options.
+			if(!("supressAlerts" in page.settings) || page.settings.alertsDefaultOn !== true) {
+				page.settings.supressAlerts = false;
+				page.settings.alertsDefaultOn = true;
 			}
 			if(!("respectMaxLength" in page.settings)) {
 				page.settings.respectMaxLength = false;
+			}
+			// Save offer timers (milliseconds, as strings): see browserAction.setRememberPopup.
+			if(!("blinkTimeout" in page.settings)) {
+				page.settings.blinkTimeout = "7500";
+			}
+			if(!("blinkMinTimeout" in page.settings)) {
+				page.settings.blinkMinTimeout = "-1";
+			}
+			if(!("allowedRedirect" in page.settings)) {
+				page.settings.allowedRedirect = "1";
 			}
 			browser.storage.local.set({'settings': page.settings});
 			resolve(page.settings);

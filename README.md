@@ -1,6 +1,6 @@
 <div align="center">
 
-# KeePassHttp-Neo
+# KeePassHttp-Link
 
 **Fill your KeePass logins in Firefox, with a security-first rewrite of KeePassHttp-Connector.**
 
@@ -10,11 +10,11 @@
 
 </div>
 
-KeePassHttp-Neo is a Firefox extension. It finds login forms on web pages and fills them with entries from your [KeePass](https://keepass.info) database. It talks to KeePass through the [KeePassHttp](https://github.com/alan-null/keepasshttp) plugin, on your own computer only.
+KeePassHttp-Link is a Firefox extension. It finds login forms on web pages and fills them with entries from your [KeePass](https://keepass.info) database. It talks to KeePass through the [KeePassHttp](https://github.com/alan-null/keepasshttp) plugin, on your own computer only.
 
-<p align="center"><img src="documentation/images/architecture.svg" width="900" alt="Firefox with the KeePassHttp-Neo extension connects over localhost to KeePass with the KeePassHttp plugin."></p>
+<p align="center"><img src="documentation/images/architecture.svg" width="900" alt="Firefox with the KeePassHttp-Link extension connects over localhost to KeePass with the KeePassHttp plugin."></p>
 
-It is a modified version of [KeePassHttp-Connector](https://github.com/smorks/keepasshttp-connector), which is no longer maintained. This version fixes security problems, removes old libraries and adds automated tests. See the [closed issues](https://github.com/odyodyodys/keepasshttp-neo/issues?q=is%3Aissue+is%3Aclosed) for the full list of changes.
+It is a modified version of [KeePassHttp-Connector](https://github.com/smorks/keepasshttp-connector), which is no longer maintained. This version fixes security problems, removes old libraries and adds automated tests. See the [closed issues](https://github.com/odyodyodys/keepasshttp-link/issues?q=is%3Aissue+is%3Aclosed) for the full list of changes.
 
 ## Contents
 
@@ -64,7 +64,7 @@ This extension is not published on addons.mozilla.org yet. Install it from the s
 1. **KeePass plugin**: download `KeePassHttp.plgx` from the [alan-null/keepasshttp releases](https://github.com/alan-null/keepasshttp/releases). Copy it into the `Plugins` folder of KeePass, then restart KeePass.
 2. **Disable the original KeePassHttp-Connector** if it is installed. Both would try to fill the same login fields.
 3. **Load the extension:**
-   - Get the code: `git clone https://github.com/odyodyodys/keepasshttp-neo.git`
+   - Get the code: `git clone https://github.com/odyodyodys/keepasshttp-link.git`
    - In Firefox, open `about:debugging#/runtime/this-firefox`.
    - Click **Load Temporary Add-on…** and choose `src/manifest.json`.
 
@@ -97,19 +97,31 @@ To update an existing entry, turn on **Always allow updating entries** in the Ke
 ## Settings
 
 Open the settings from the toolbar popup, or from the extension's page in `about:addons`.
+Every option has an (i) button with a longer explanation. Changes are saved at once.
 
-| Setting | Default | What it does |
-|---|---|---|
-| Automatically retrieve credentials | On | Ask KeePass for logins when a page opens |
-| Activate autocomplete for username fields | On | Show the login dropdown under username fields |
-| Automatically fill-in single credentials entry | Off | Fill without asking when KeePass returns exactly one login |
-| Activate password generator | On | Show the key icon in password fields |
-| Auto fill HTTP Auth dialogs and send them | Off | Send Basic Auth logins without asking (on https pages only) |
-| Respect maxlength attribute | Off | Cut filled values to the field's maximum length |
-| Supress warnings and errors via alert | On | Do not show warnings and errors as page alerts |
-| Port | 19455 | Must match the port in the KeePassHttp plugin options |
+A status card at the top shows the connection to KeePass on every tab, and updates by itself while the page is open.
+It offers at most one next step: *Unlock in KeePass*, *Give Firefox access*, *Give access again* or *Cancel*.
 
-The settings page also lists your **connected databases**. Give each one its own toolbar icon color, from the presets or as a `#rrggbb` value, to see at a glance which database is in use. It also lists the **fields you chose** per site. You can remove connections and fields there.
+**KeePass Databases**: every database Firefox has access to, by the Key Name you typed in KeePass, with an optional
+description, the date it was added and last used. A database that KeePass no longer accepts stays in the list,
+marked *Access lost*, with *Give access again*. *Remove* deletes it from Firefox only.
+The port of the KeePassHttp plugin is under *Advanced* (and under *Help* when KeePass does not answer).
+
+| Tab | Setting | Default | What it does |
+|---|---|---|---|
+| Read from KeePass | Ask KeePass for logins when a page opens | On | One request to KeePass per page with a login form |
+| Read from KeePass | Show a list of logins under the username field | On | Login dropdown under username fields (needs the option above) |
+| Read from KeePass | Fill the login without asking when KeePass has exactly one | Off | Never on pages without https (needs the first option) |
+| Read from KeePass | Show a message when a shortcut cannot fill | On | Small notification at the top right of the page, closes on its own |
+| Read from KeePass | Answer the browser's own login dialog with KeePass | Off | HTTP authentication; sends without asking only on https with exactly one login |
+| Read from KeePass | Cut values to the maximum length of the field | Off | Advanced |
+| Update KeePass | Keep the save offer open for | 7.5 s | Time the toolbar icon offers to save a new login |
+| Update KeePass | Close the offer after page changes | Off | Advanced: ignored seconds (2 s) and allowed page changes (1) |
+| Password generator | Show a key icon in password fields | On | KeePass generates the password; the clipboard is cleared after 30 s |
+| KeePass Databases | Port of the KeePassHttp plugin | 19455 | Must match the port in the KeePassHttp plugin options |
+
+The keyboard shortcuts (Alt+Shift+U fills username and password, Alt+Shift+P the password only) are shown with their current keys and can be changed from the settings page.
+The *Read from KeePass* tab also lists the **sites where you chose the fields yourself**; remove a site there to go back to automatic detection.
 
 ## How it works
 
@@ -147,7 +159,7 @@ Limits you should know:
 - KeePassHttp is an old protocol. Any program on your computer can try to connect to the plugin's port. KeePass asks you before it accepts a new connection, so read that dialog with care.
 - The plugin decides which entries match a page. Keep the URLs in your entries exact.
 
-**Reporting a vulnerability:** please do not open a public issue. Use [GitHub private vulnerability reporting](https://github.com/odyodyodys/keepasshttp-neo/security) for this repository.
+**Reporting a vulnerability:** please do not open a public issue. Use [GitHub private vulnerability reporting](https://github.com/odyodyodys/keepasshttp-link/security) for this repository.
 
 ## Privacy
 

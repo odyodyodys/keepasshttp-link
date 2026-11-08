@@ -1,0 +1,882 @@
+/* Settings page. Loaded after ../ui.css (shared with the toolbar popups).
+   Colors: design tokens (input/design-settings/tokens.css), light by default,
+   dark through prefers-color-scheme. Sizes follow the design mockups. */
+
+:root {
+	/* surfaces */
+	--page: #f9f9fb;
+	--card: #ffffff;
+	--fill: #f0f0f4;
+	--border: #cfcfd8;
+	--border-strong: #8f8f9d;
+	--row-divider: #e4e4ea;
+
+	/* text */
+	--text: #15141a;
+	--text-2: #5b5b66;
+
+	/* the extension */
+	--accent: #1d4ed8;
+	--accent-hover: #1e40af;
+	--on-accent: #ffffff;
+	--module-bg: #1d4ed8;
+	--module-border: #1e40af;
+	--module-caption: #dbeafe;
+	--module-shadow: rgba(29, 78, 216, 0.25);
+	--chip-bg: #dbeafe;
+	--chip-text: #1e40af;
+
+	/* needs you */
+	--attention: #b45309;
+	--attention-bg: #fef3c7;
+	--attention-text: #78350f;
+
+	/* connected */
+	--ok: #15803d;
+	--ok-bg: #dcfce7;
+
+	/* one-time note */
+	--note-bg: #eff6ff;
+	--note-border: #bfdbfe;
+
+	/* input fill (dark: --page) */
+	--field: var(--card);
+
+	/* shape and type */
+	--radius-card: 12px;
+	--radius-control: 8px;
+	--radius-field: 6px;
+	--font: system-ui, -apple-system, 'Segoe UI', sans-serif;
+	--font-size: 14px;
+	--line-height: 20px;
+	--content-width: 800px;
+
+	/* names used by the shared ui.css rules (behaviour tabs, dialogs) */
+	--bg: var(--page);
+	--surface: var(--card);
+	--muted: var(--text-2);
+	--hover: var(--fill);
+	--success: var(--ok);
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--page: #1c1b22;
+		--card: #2b2a33;
+		--fill: #35343d;
+		--border: #52525e;
+		--border-strong: #8f8f9d;
+		--row-divider: #3f3e48;
+
+		--text: #fbfbfe;
+		--text-2: #c0bfc9;
+
+		--accent: #60a5fa;
+		--accent-hover: #93c5fd;
+		--on-accent: #0c1a2e;
+		--module-bg: #1d4ed8;
+		--module-border: #60a5fa;
+		--module-caption: #dbeafe;
+		--module-shadow: rgba(96, 165, 250, 0.25);
+		--chip-bg: #26354f;
+		--chip-text: #93c5fd;
+
+		--attention: #fbbf24;
+		--attention-bg: #433a28;
+		--attention-text: #fde68a;
+
+		--ok: #4ade80;
+		--ok-bg: #2a4036;
+
+		--note-bg: #1e2a44;
+		--note-border: #2e4a7d;
+
+		--field: var(--page);
+	}
+}
+
+:root {
+	font: var(--font-size)/var(--line-height) var(--font);
+}
+
+body.options {
+	margin: 0;
+	padding: 0;
+	background: var(--page);
+	color: var(--text);
+
+	& .container {
+		box-sizing: border-box;
+		width: calc(var(--content-width) + 80px);
+		margin: 0 auto;
+		padding: 32px 40px 40px;
+		display: flex;
+		flex-direction: column;
+		gap: 20px;
+	}
+
+	& a {
+		color: var(--accent);
+
+		&:hover {
+			color: var(--accent-hover);
+		}
+	}
+
+	/* ---------- focus: 2 px accent ring on every control ---------- */
+	& :is(button, a, input, [tabindex]):focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+
+	/* ---------- header ---------- */
+	& .page-head {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+
+		& img {
+			width: 36px;
+			height: 36px;
+			flex-shrink: 0;
+		}
+		& h1 {
+			margin: 0;
+			font-size: 20px;
+			line-height: 24px;
+			font-weight: 600;
+		}
+	}
+
+	/* ---------- buttons (SPEC 11.1) ---------- */
+	& button.primary,
+	& button.secondary {
+		padding: 8px 14px;
+		border-radius: var(--radius-control);
+		font: inherit;
+		font-weight: 600;
+		cursor: pointer;
+		filter: none;
+	}
+	& button.primary {
+		background: var(--accent);
+		color: var(--on-accent);
+		border: none;
+
+		&:hover:not(:disabled) {
+			background: var(--accent-hover);
+			filter: none;
+		}
+	}
+	& button.secondary {
+		background: var(--card);
+		color: var(--text);
+		border: 1px solid var(--border);
+
+		&:hover:not(:disabled) {
+			background: var(--fill);
+		}
+	}
+	& button.small {
+		padding: 6px 12px;
+		font-size: inherit;
+	}
+	& button.quiet,
+	& button.quiet-strong,
+	& button.disclosure,
+	& button.link-accent {
+		padding: 0;
+		background: none;
+		border: none;
+		border-radius: 2px;
+		font: inherit;
+		cursor: pointer;
+
+		&:hover:not(:disabled) {
+			background: none;
+			text-decoration: underline;
+		}
+	}
+	& button.quiet {
+		font-size: 13px;
+		color: var(--text-2);
+	}
+	& button.quiet-strong {
+		font-weight: 600;
+		color: var(--text-2);
+	}
+	& button.disclosure {
+		font-weight: 600;
+		color: var(--text);
+	}
+	& button.link-accent {
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--accent);
+	}
+	& button.disclosure.quiet-strong {
+		color: var(--text-2);
+	}
+
+	/* ---------- inputs (SPEC 11.2) ---------- */
+	& input[type=text],
+	& input[type=number] {
+		box-sizing: border-box;
+		padding: 6px 8px;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-field);
+		background: var(--field);
+		color: var(--text);
+		font: inherit;
+	}
+
+	/* ---------- chips (SPEC 11.3) ---------- */
+	& .chip {
+		display: inline-block;
+		background: var(--chip-bg);
+		color: var(--chip-text);
+		font-weight: 600;
+		border-radius: 6px;
+		overflow-wrap: anywhere;
+	}
+	& .chip-list {
+		padding: 2px 8px;
+	}
+	& .chip-headline {
+		padding: 0 8px;
+		line-height: 22px;
+	}
+	& .chip-text {
+		padding: 0 6px;
+		line-height: 18px;
+	}
+	& .chip-caption {
+		padding: 0 5px;
+		border-radius: 5px;
+		line-height: 16px;
+	}
+
+	/* ---------- status card (SPEC 4) ---------- */
+	& .status-card {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+		padding: 20px;
+		background: var(--card);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-card);
+
+		&[hidden] {
+			display: none;
+		}
+		& .attention { color: var(--attention); }
+		& .ok { color: var(--ok); }
+	}
+
+	/* Diagram: 760 x 100, absolute boxes. The titles of the Firefox and
+	   KeePass boxes sit top-left, above the modules. */
+	& .diagram {
+		position: relative;
+		width: 760px;
+		height: 100px;
+
+		& > * {
+			position: absolute;
+			box-sizing: border-box;
+		}
+	}
+	& .d-box {
+		top: 0;
+		height: 100px;
+		background: var(--fill);
+		border: 1px solid var(--border);
+		border-radius: 12px;
+		font-weight: 600;
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
+		transition: box-shadow 150ms;
+	}
+	& .d-firefox {
+		left: 0;
+		width: 170px;
+		padding: 10px 12px;
+	}
+	& .d-keepass {
+		left: 450px;
+		width: 310px;
+		padding: 10px 12px;
+	}
+	/* Hover: a shadow in the brand color of each part. */
+	& .d-firefox:hover {
+		box-shadow: 0 4px 14px rgb(32 19 58 / 0.45);   /* #20133A */
+	}
+	& .d-keepass:hover {
+		box-shadow: 0 4px 14px rgb(80 119 229 / 0.45); /* #5077e5 */
+	}
+	& .d-plugin:hover,
+	& .d-plugin[aria-expanded=true] {
+		box-shadow: 0 4px 14px rgb(21 128 61 / 0.45);  /* #15803d */
+	}
+	& .d-ext:hover,
+	& .d-ext[aria-expanded=true] {
+		box-shadow: 0 4px 14px rgb(29 78 216 / 0.45);  /* #1d4ed8 */
+	}
+
+	/* The two modules are buttons: each opens an info popover. */
+	& button.d-module {
+		margin: 0;
+		font: inherit;
+		font-size: 13px;
+		line-height: 16px;
+		cursor: pointer;
+		transition: box-shadow 150ms;
+	}
+	& button.d-ext,
+	& button.d-ext:hover {
+		background: var(--module-bg);
+		color: #ffffff;
+	}
+	& button.d-plugin,
+	& button.d-plugin:hover {
+		background: var(--card);
+		color: var(--text);
+	}
+	& button.d-plugin[aria-expanded=true] {
+		background: var(--fill);
+		border: 1.5px solid var(--text-2);
+	}
+	& .d-badge {
+		position: absolute;
+		right: -8px;
+		top: -8px;
+		width: 16px;
+		height: 16px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 50%;
+		background: var(--card);
+		color: var(--text-2);
+	}
+
+	/* Info popover under a module (design: settings-popup). */
+	& .d-popover {
+		top: 104px;
+		width: 360px;
+		padding: 16px;
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		background: var(--card);
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		box-shadow: 0 8px 24px rgba(21, 20, 26, 0.14);
+		z-index: 3;
+		text-align: left;
+		font-size: 13px;
+		line-height: 18px;
+		color: var(--text);
+
+		&[hidden] { display: none; }
+		&.pop-ext { left: 0; }
+		&.pop-plugin { left: 260px; }
+	}
+	& .pop-arrow {
+		position: absolute;
+		left: 174px;
+		top: -7px;
+		width: 12px;
+		height: 12px;
+		background: var(--card);
+		border-left: 1px solid var(--border);
+		border-top: 1px solid var(--border);
+		transform: rotate(45deg);
+	}
+	& .pop-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+	}
+	& .pop-title {
+		font-size: 14px;
+		line-height: 20px;
+		font-weight: 600;
+	}
+	& button.pop-close {
+		width: 24px;
+		height: 24px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
+		background: none;
+		border: none;
+		border-radius: 6px;
+		color: var(--text-2);
+		cursor: pointer;
+
+		&:hover {
+			background: var(--fill);
+		}
+	}
+	& .pop-desc {
+		color: var(--text-2);
+	}
+	& .pop-actions {
+		display: flex;
+		gap: 8px;
+	}
+	& a.pop-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 6px 12px;
+		background: var(--accent);
+		color: var(--on-accent);
+		border-radius: 8px;
+		font-weight: 600;
+		text-decoration: none;
+
+		&:hover {
+			background: var(--accent-hover);
+			color: var(--on-accent);
+		}
+	}
+	& .d-caption {
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 400;
+		color: var(--text-2);
+		white-space: nowrap;
+
+		& .chip-caption {
+			max-width: 110px;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			vertical-align: bottom;
+		}
+	}
+	& .d-module {
+		top: 38px;
+		width: 140px;
+		height: 52px;
+		padding: 6px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		text-align: center;
+		font-size: 13px;
+		line-height: 16px;
+		border-radius: 10px;
+	}
+	& .d-ext {
+		left: 110px;
+		background: var(--module-bg);
+		border: 2px solid var(--module-border);
+		box-shadow: 0 4px 12px var(--module-shadow);
+		color: #ffffff;
+
+		& .d-sub { color: var(--module-caption); }
+	}
+	& .d-plugin {
+		left: 370px;
+		transition: box-shadow 150ms;
+		background: var(--card);
+		border: 1.5px dashed var(--border-strong);
+
+		& .d-sub { color: var(--text-2); }
+	}
+	& .d-link {
+		left: 250px;
+		top: 63px;
+		width: 120px;
+		height: 0;
+		border-top: 2px solid var(--ok);
+
+		&.off {
+			border-top-style: dashed;
+			border-top-color: var(--attention);
+		}
+	}
+	& .d-link-label {
+		left: 250px;
+		top: 70px;
+		width: 120px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 4px;
+		font-size: 12px;
+		line-height: 16px;
+
+		&[hidden] { display: none; }
+		&.off {
+			font-weight: 600;
+			color: var(--attention);
+		}
+		&.wait {
+			color: var(--text-2);
+		}
+		& .d-link-icon {
+			display: inline-flex;
+		}
+	}
+	& .d-tile {
+		left: 600px;
+		top: 38px;
+		width: 148px;
+		height: 52px;
+		padding: 6px 8px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		border-radius: 10px;
+		font-size: 13px;
+		line-height: 16px;
+
+		&[hidden] { display: none; }
+		& .d-tile-icon {
+			display: inline-flex;
+			flex-shrink: 0;
+		}
+		& b {
+			overflow-wrap: anywhere;
+		}
+		&.ok {
+			background: var(--ok-bg);
+			border: 1px solid var(--ok);
+			& .d-tile-icon, & .d-tile-state { color: var(--ok); }
+		}
+		&.attention,
+		&.wait {
+			background: var(--attention-bg);
+			border: 2px solid var(--attention);
+			& .d-tile-icon, & .d-tile-state { color: var(--attention); }
+		}
+		&.wait {
+			border-style: dashed;
+		}
+	}
+
+	/* Sentence block (SPEC 4.2). */
+	& .sentence {
+		display: flex;
+		align-items: flex-start;
+		gap: 10px;
+
+		& .state-icon {
+			display: inline-flex;
+			flex-shrink: 0;
+			margin-top: 1px;
+		}
+		& .sentence-text {
+			display: flex;
+			flex-direction: column;
+			gap: 4px;
+			flex: 1 1 auto;
+		}
+		& .headline {
+			font-size: 16px;
+			line-height: 22px;
+			font-weight: 600;
+		}
+		& .subline {
+			color: var(--text-2);
+		}
+		& .failure {
+			color: var(--attention);
+			font-weight: 600;
+		}
+		& button.quiet {
+			flex-shrink: 0;
+			margin-left: auto;
+		}
+	}
+	& .details-line {
+		font-size: 13px;
+		color: var(--text-2);
+		margin-top: -8px;
+	}
+	& .card-action {
+		align-self: flex-start;
+	}
+
+	/* One-time note (SPEC 4.6). */
+	& .note {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 16px;
+		padding: 10px 14px;
+		background: var(--note-bg);
+		border: 1px solid var(--note-border);
+		border-radius: 10px;
+
+		&[hidden] { display: none; }
+		& .note-text {
+			display: flex;
+			align-items: flex-start;
+			gap: 10px;
+		}
+		& .note-icon {
+			display: inline-flex;
+			flex-shrink: 0;
+			margin-top: 1px;
+			color: var(--accent);
+		}
+		& button {
+			flex-shrink: 0;
+		}
+	}
+
+	/* What you need (SPEC 4.4). */
+	& .need {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding: 12px 16px;
+		background: var(--fill);
+		border-radius: 10px;
+
+		&[hidden] { display: none; }
+		& .need-title {
+			font-size: 13px;
+			line-height: 18px;
+			font-weight: 600;
+			color: var(--text-2);
+		}
+		& .need-row {
+			display: flex;
+			align-items: flex-start;
+			gap: 10px;
+
+			&.done .need-text { color: var(--text-2); }
+		}
+		& .tick {
+			box-sizing: border-box;
+			width: 16px;
+			height: 16px;
+			margin-top: 2px;
+			flex-shrink: 0;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			border: 1.5px solid var(--border-strong);
+			border-radius: 4px;
+			background: var(--card);
+
+			&.on {
+				border: none;
+				background: var(--ok);
+				color: #ffffff;
+			}
+		}
+	}
+
+	/* Help (SPEC 4.5) and Advanced (SPEC 6.7). */
+	& .help,
+	& .help-body,
+	& .advanced-body {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+
+		&[hidden] { display: none; }
+	}
+	& .help > button.disclosure {
+		align-self: flex-start;
+	}
+	& .help-text {
+		margin: 0;
+		color: var(--text-2);
+	}
+	& .port-row {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+
+		& label {
+			color: var(--text-2);
+		}
+		& input {
+			width: 90px;
+		}
+		& .port-status.error {
+			color: var(--attention);
+			font-size: 13px;
+		}
+	}
+
+	/* ---------- tabs (SPEC 11.4) ---------- */
+	& .tabs {
+		display: flex;
+		gap: 24px;
+		border-bottom: 1px solid var(--border);
+
+		& [role=tab] {
+			padding: 8px 0;
+			background: none;
+			border: none;
+			border-bottom: 2px solid transparent;
+			border-radius: 0;
+			font: inherit;
+			color: var(--text-2);
+			cursor: pointer;
+
+			&:hover {
+				background: none;
+				color: var(--text);
+			}
+			&[aria-selected=true] {
+				border-bottom-color: var(--accent);
+				color: var(--accent);
+				font-weight: 600;
+			}
+		}
+	}
+
+	& section.tab[hidden] {
+		display: none;
+	}
+
+	/* ---------- Databases tab (SPEC 6) ---------- */
+	& #tab-databases {
+		display: flex;
+		flex-direction: column;
+		gap: 20px;
+	}
+	& .db-empty {
+		margin: 0;
+		color: var(--text-2);
+	}
+	& .db-list {
+		display: flex;
+		flex-direction: column;
+
+		&[hidden] { display: none; }
+	}
+	& .db-head {
+		display: flex;
+		align-items: center;
+		gap: 16px;
+		padding: 0 0 8px;
+		font-size: 12px;
+		line-height: 16px;
+		color: var(--text-2);
+		border-bottom: 1px solid var(--border);
+
+		& .db-col-name { width: 300px; }
+		& .db-col-desc { flex: 1 1 auto; }
+		& .db-col-actions { width: 60px; }
+	}
+	& .db-rows {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+	& .db-row {
+		display: flex;
+		align-items: center;
+		gap: 16px;
+		padding: 12px 0;
+		border-bottom: 1px solid var(--row-divider);
+	}
+	& .db-name {
+		width: 300px;
+		flex-shrink: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 4px;
+	}
+	& .db-meta {
+		font-size: 12px;
+		line-height: 16px;
+		color: var(--text-2);
+
+		& .status-word {
+			font-weight: 600;
+
+			&.ok { color: var(--ok); }
+			&.attention { color: var(--attention); }
+			&:not(.ok, .attention) { font-weight: 400; }
+		}
+	}
+	& .db-desc {
+		flex: 1 1 auto;
+		min-width: 0;
+	}
+	& .db-actions {
+		min-width: 60px;
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 14px;
+	}
+	& .db-more {
+		display: flex;
+		flex-direction: column;
+		gap: 20px;
+
+		&[hidden] { display: none; }
+		& > button {
+			align-self: flex-start;
+		}
+	}
+	& .footnotes {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		font-size: 12px;
+		line-height: 16px;
+		color: var(--text-2);
+	}
+
+	/* ---------- behaviour tabs (SPEC 7) ---------- */
+	& .notice {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 8px 12px;
+		margin: 0 0 16px;
+		background: var(--attention-bg);
+		color: var(--attention-text);
+		border-radius: 8px;
+		font-size: 13px;
+		line-height: 18px;
+
+		&[hidden] { display: none; }
+		& .notice-icon {
+			display: inline-flex;
+			flex-shrink: 0;
+			color: var(--attention);
+		}
+	}
+
+	/* ---------- dialogs ---------- */
+	& dialog {
+		border-radius: var(--radius-card);
+		background: var(--card);
+		color: var(--text);
+
+		& h3 {
+			font-size: 16px;
+			line-height: 22px;
+		}
+		& p {
+			color: var(--text-2);
+		}
+	}
+
+	/* ---------- About: credits ---------- */
+	& .credits {
+		margin: 16px 0 0;
+		font-size: 12px;
+		line-height: 16px;
+		color: var(--text-2);
+	}
+}

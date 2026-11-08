@@ -1643,7 +1643,7 @@ cipFields.useDefinedCredentialFields = function() {
 
 var cip = {};
 
-// settings of KeePassHttp-Neo
+// settings of KeePassHttp-Link
 cip.settings = {};
 // username field which will be set on focus
 cip.u = null;
@@ -1796,6 +1796,128 @@ cip.retrieveCredentialsCallback = function (credentials, dontAutoFillIn) {
 }
 
 cip.insecureWarningText = "Not secure: this page or its login form does not use https. Passwords can be read by others on the network.";
+
+// Short notification at the top right of the page, for example when a
+// keyboard shortcut cannot fill. Replaces the old blocking alert(). Hidden
+// when the setting "supressAlerts" is on. Lives in a closed shadow root, so
+// the page cannot read or restyle it. Closes itself after a few seconds.
+cip.notifyHideAfterMs = 6000;
+cip.notifyHost = null;
+
+cip.notifyIconSvg = function() {
+	var ns = "http://www.w3.org/2000/svg";
+	var svg = document.createElementNS(ns, "svg");
+	svg.setAttribute("viewBox", "0 0 128 128");
+	svg.setAttribute("width", "28");
+	svg.setAttribute("height", "28");
+	svg.setAttribute("aria-hidden", "true");
+	var paths = [
+		["#1d4ed8", "M28 0H100A28 28 0 0 1 128 28V100A28 28 0 0 1 100 128H28A28 28 0 0 1 0 100V28A28 28 0 0 1 28 0Z", null],
+		["#ffffff", "M37 25H55A15 15 0 0 1 70 40V58A15 15 0 0 1 55 73H37A15 15 0 0 1 22 58V40A15 15 0 0 1 37 25ZM40 37H52A6 6 0 0 1 58 43V55A6 6 0 0 1 52 61H40A6 6 0 0 1 34 55V43A6 6 0 0 1 40 37Z", "evenodd"],
+		["#ffffff", "M64 43H100A6 6 0 0 1 106 49V67H94V55H88V67H76V55H64ZM22 97a6 6 0 1 0 12 0a6 6 0 1 0 -12 0ZM46 97a6 6 0 1 0 12 0a6 6 0 1 0 -12 0ZM70 97a6 6 0 1 0 12 0a6 6 0 1 0 -12 0Z", null]
+	];
+	paths.forEach(function(p) {
+		var el = document.createElementNS(ns, "path");
+		el.setAttribute("fill", p[0]);
+		el.setAttribute("d", p[1]);
+		if (p[2]) {
+			el.setAttribute("fill-rule", p[2]);
+		}
+		svg.appendChild(el);
+	});
+	return svg;
+};
+
+cip.notifyEnsureHost = function() {
+	if (cip.notifyHost && cip.notifyHost.host.isConnected) {
+		return cip.notifyHost;
+	}
+	var host = document.createElement("kphc-notice");
+	kphcStyle(host, { "all": "initial", "position": "fixed", "top": "16px", "right": "16px",
+		"z-index": "2147483647", "display": "flex", "flex-direction": "column", "gap": "8px",
+		"width": "340px", "max-width": "calc(100vw - 32px)", "pointer-events": "none" });
+	var root = host.attachShadow({ mode: "closed" });
+	var list = document.createElement("div");
+	list.setAttribute("role", "status");
+	list.setAttribute("aria-live", "polite");
+	kphcStyle(list, { "display": "flex", "flex-direction": "column", "gap": "8px" });
+	root.appendChild(list);
+	document.documentElement.appendChild(host);
+	cip.notifyHost = { "host": host, "list": list };
+	return cip.notifyHost;
+};
+
+cip.notify = function(message) {
+	message = String(message || "");
+	if (cip.settings && cip.settings.supressAlerts === true) {
+		console.log("KeePassHttp-Link: " + message);
+		return;
+	}
+	var dark = false;
+	try {
+		dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+	} catch (e) { /* keep light */ }
+
+	var ui = cip.notifyEnsureHost();
+	var box = document.createElement("div");
+	box.className = "kphc-notice-box";
+	kphcStyle(box, { "display": "flex", "align-items": "flex-start", "gap": "10px", "padding": "12px 12px 12px 14px",
+		"border-radius": "10px", "box-sizing": "border-box",
+		"background": dark ? "#2b2a33" : "#ffffff", "color": dark ? "#fbfbfe" : "#1f1f23",
+		"border": "1px solid " + (dark ? "#52525e" : "#d0d0d7"), "box-shadow": "0 8px 24px rgba(0,0,0,0.22)",
+		"font": "13px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif", "text-align": "left",
+		"pointer-events": "auto", "opacity": "0", "transform": "translateY(-6px)",
+		"transition": "opacity 160ms ease, transform 160ms ease" });
+
+	var icon = cip.notifyIconSvg();
+	kphcStyle(icon, { "flex": "0 0 28px", "margin-top": "1px" });
+	box.appendChild(icon);
+
+	var body = document.createElement("div");
+	kphcStyle(body, { "flex": "1 1 auto", "min-width": "0" });
+	var title = document.createElement("div");
+	title.textContent = "KeePassHttp-Link";
+	kphcStyle(title, { "font-weight": "600", "margin-bottom": "2px" });
+	var text = document.createElement("div");
+	text.textContent = message;
+	kphcStyle(text, { "color": dark ? "#b0b0bb" : "#5b5b66", "white-space": "pre-line", "overflow-wrap": "anywhere" });
+	body.appendChild(title);
+	body.appendChild(text);
+	box.appendChild(body);
+
+	var close = document.createElement("button");
+	close.type = "button";
+	close.textContent = "×";
+	close.setAttribute("aria-label", "Close");
+	kphcStyle(close, { "all": "initial", "cursor": "pointer", "font": "18px/1 system-ui, sans-serif",
+		"color": dark ? "#b0b0bb" : "#5b5b66", "padding": "0 2px", "margin": "-2px -2px 0 0" });
+	box.appendChild(close);
+
+	var timer = null;
+	var remove = function() {
+		clearTimeout(timer);
+		if (!box.isConnected) {
+			return;
+		}
+		kphcStyle(box, { "opacity": "0", "transform": "translateY(-6px)" });
+		setTimeout(function() {
+			box.remove();
+			if (ui.list.childElementCount === 0 && ui.host.isConnected) {
+				ui.host.remove();
+				cip.notifyHost = null;
+			}
+		}, 180);
+	};
+	close.addEventListener("click", remove);
+	box.addEventListener("mouseenter", function() { clearTimeout(timer); });
+	box.addEventListener("mouseleave", function() { timer = setTimeout(remove, 2000); });
+
+	ui.list.appendChild(box);
+	requestAnimationFrame(function() {
+		kphcStyle(box, { "opacity": "1", "transform": "translateY(0)" });
+	});
+	timer = setTimeout(remove, cip.notifyHideAfterMs);
+};
 
 // True if the page is not https (loopback hosts excepted, the traffic stays on
 // this computer) or the form sends to a not-https address. On such pages we
@@ -1992,11 +2114,8 @@ cip.fillInFromActiveElementPassOnly = function(suppressWarnings) {
 	}
 
 	if(!_f(combination.password)) {
-		var message = "Unable to find a password field";
-		browser.runtime.sendMessage({
-			action: 'alert',
-			args: [message]
-		});
+		var message = "No password field found next to the cursor.";
+		cip.notify(message);
 		return;
 	}
 
@@ -2099,11 +2218,8 @@ cip.fillEntry = async function(i, uField, pField, stringFieldIds, opts) {
 cip.fillIn = async function(combination, onlyPassword, suppressWarnings) {
 	// no credentials available
 	if (cip.credentials.length == 0 && !suppressWarnings) {
-		var message = "No logins found.";
-		browser.runtime.sendMessage({
-			action: 'alert',
-			args: [message]
-		});
+		var message = "KeePass has no login for this page.";
+		cip.notify(message);
 		return;
 	}
 
@@ -2117,11 +2233,8 @@ cip.fillIn = async function(combination, onlyPassword, suppressWarnings) {
 
 		if(!filledIn) {
 			if(!suppressWarnings) {
-				var message = "Error #101\nCannot find fields to fill in.";
-				browser.runtime.sendMessage({
-					action: 'alert',
-					args: [message]
-				});
+				var message = "The login fields could not be filled.";
+				cip.notify(message);
 			}
 		}
 	}
@@ -2132,11 +2245,8 @@ cip.fillIn = async function(combination, onlyPassword, suppressWarnings) {
 
 		if(!filledIn) {
 			if(!suppressWarnings) {
-				var message = "Error #102\nCannot find fields to fill in.";
-				browser.runtime.sendMessage({
-					action: 'alert',
-					args: [message]
-				});
+				var message = "The login fields could not be filled.";
+				cip.notify(message);
 			}
 		}
 	}
@@ -2171,32 +2281,21 @@ cip.fillIn = async function(combination, onlyPassword, suppressWarnings) {
 			// user has to select correct credentials by himself
 			if(countPasswords > 1) {
 				if(!suppressWarnings) {
-					var message = "Error #105\nMore than one login was found in KeePass!\n" +
-					"Press the KeePassHttp-Neo icon for more options.";
-					browser.runtime.sendMessage({
-						action: 'alert',
-						args: [message]
-					});
+					var message = "KeePass has several logins for this page. Click the toolbar icon to choose one.";
+					cip.notify(message);
 				}
 			}
 			else if(countPasswords < 1) {
 				if(!suppressWarnings) {
-					var message = "Error #103\nNo credentials for given username found.";
-					browser.runtime.sendMessage({
-						action: 'alert',
-						args: [message]
-					});
+					var message = "No KeePass login matches this username.";
+					cip.notify(message);
 				}
 			}
 		}
 		else {
 			if(!suppressWarnings) {
-					var message = "Error #104\nMore than one login was found in KeePass!\n" +
-					"Press the KeePassHttp-Neo icon for more options.";
-				browser.runtime.sendMessage({
-					action: 'alert',
-					args: [message]
-				});
+					var message = "KeePass has several logins for this page. Click the toolbar icon to choose one.";
+				cip.notify(message);
 			}
 		}
 	}
@@ -2231,7 +2330,7 @@ cip.contextMenuRememberCredentials = function() {
 	}
 
 	if(!cip.rememberCredentials(usernameValue, passwordValue)) {
-		alert("Could not detect changed credentials.");
+		cip.notify("No changed login was found on this page.");
 	}
 };
 

@@ -18,13 +18,30 @@ keepass.keyBody = "chromeipass-key";
 keepass.to_s = cryptoHelpers.convertByteArrayToString;
 keepass.to_b = cryptoHelpers.convertStringToByteArray;
 
+keepass.testedWithVersion = "2.3.1.0";
+// Settings page: a pairing waits at most this long for the KeePass dialog.
+keepass.pairingTimeout = 60 * 1000;
+// Settings page: a connection check that gets no answer in this time counts
+// as "KeePass is busy" (a modal KeePass dialog blocks the plugin), not as gone.
+// Must be longer than a refused connection to localhost takes in Firefox
+// on Windows (measured: about 6.4 s), else "KeePass closed" looks like "busy".
+keepass.checkTimeout = 10 * 1000;
+// The pairing in progress, or null: { xhr, cancelled }.
+keepass.pairing = null;
+// True if the last database check timed out (KeePass busy).
+keepass.lastCheckBusy = false;
+// False until KeePassHttp answered or refused once: before that the state
+// above is only the start value, not something seen.
+keepass.stateKnown = false;
+
 // The old online update check is removed: drop its stored value.
 browser.storage.local.remove('latestKeePassHttp');
 
+keepass.keyRing = {};
 browser.storage.local.get({'keyRing': {}})
 	.then((item) => {
-	// in-memory filter only; migrateKeyRing() persists the removal
-	keepass.dropWeakKeys(item.keyRing);
+	// in-memory only; loadKeyRing() stores the marks
+	keepass.markWeakKeys(item.keyRing);
 	keepass.keyRing = item.keyRing;
 });
 
@@ -76,6 +93,7 @@ keepass.updateCredentials = function(callback, tab, entryId, username, password,
 				var r = JSON.parse(response);
 				if (await keepass.verifyResponse(r, key, id)) {
 					code = "success";
+					keepass.updateLastUsed(keepass.databaseHash);
 				}
 				else {
 					code = "error";
@@ -134,7 +152,7 @@ keepass.retrieveCredentials = function (callback, tab, url, submiturl, forceCall
 				if (await keepass.verifyResponse(r, key, id)) {
 					// All entries or none (see decryptEntries).
 					entries = (await keepass.decryptEntries(r.Entries, key, r.Nonce)) || [];
-					keepass.updateLastUsed(keepass.databaseHash);
+					keepass.updateLastUsed(keepass.databaseHash, true);
 					if(entries.length == 0) {
 						//questionmark-icon is not triggered, so we have to trigger for the normal symbol
 						browserAction.showDefault(null, tab);
@@ -214,17 +232,64 @@ keepass.generatePassword = function (callback, tab, forceCallback) {
 	});
 }
 
-keepass.associate = function(callback, tab) {
+// Pair with the database that is open in KeePass now. KeePass shows its own
+// dialog and asks for a name. If expectedHash is given ("Give access again"
+// for a known database), the open database must be that one; the entry and
+// its description are kept. Only one pairing runs at a time, and it can be
+// cancelled (cancelAssociate). The callback (if any) always gets a result:
+//   { ok: true, identifier }                      paired
+//   { ok: false, reason, error, identifier }      reason: "already", "busy",
+//       "unavailable", "locked", "not-active", "refused", "cancelled",
+//       "timeout", "error"
+keepass.associate = function(callback, tab, expectedHash) {
+	var done = function(result) {
+		keepass.pairing = null;
+		if(typeof callback === "function") {
+			callback(result);
+		}
+	};
+	var current = function() {
+		var entry = keepass.keyRing[keepass.databaseHash];
+		return entry ? entry.id : null;
+	};
+	var tabInfo = function() {
+		return page.tabs[tab.id] || {};
+	};
+
+	if(keepass.pairing) {
+		if(typeof callback === "function") {
+			callback({ ok: false, reason: "busy", error: "A pairing is already waiting for KeePass." });
+		}
+		return;
+	}
 	if(keepass.isAssociated()) {
+		if(typeof callback === "function") {
+			callback({ ok: false, reason: "already", identifier: current() });
+		}
 		return;
 	}
 
+	var pairing = keepass.pairing = { xhr: null, cancelled: false };
+
 	keepass.getDatabaseHash(tab).then(async () => {
-		if(keepass.isDatabaseClosed || !keepass.isKeePassHttpAvailable) {
+		if(pairing.cancelled) {
+			done({ ok: false, reason: "cancelled" });
+			return;
+		}
+		if(!keepass.isKeePassHttpAvailable) {
+			done({ ok: false, reason: "unavailable", error: "KeePass or the KeePassHttp plugin does not answer." });
+			return;
+		}
+		if(keepass.isDatabaseClosed) {
+			done({ ok: false, reason: "locked", error: "The KeePass database is locked or closed." });
+			return;
+		}
+		if(expectedHash && expectedHash !== keepass.databaseHash) {
+			done({ ok: false, reason: "not-active", error: "This database is not the active one in KeePass." });
 			return;
 		}
 
-		page.tabs[tab.id].errorMessage = null;
+		tabInfo().errorMessage = null;
 
 		var rawKey = cryptoHelpers.randomBytes(keepass.keyBytes);
 		var key = keepass.b64e(rawKey);
@@ -236,41 +301,112 @@ keepass.associate = function(callback, tab) {
 
 		await keepass.setVerifier(request, key);
 
-		keepass.sendAsync(request).then(async (result) => {
-			if(keepass.checkStatus(result[0], tab)) {
-				var r = JSON.parse(result[1]);
+		keepass.sendAsync(request, {
+			timeout: keepass.pairingTimeout,
+			onXhr: function(xhr) { pairing.xhr = xhr; }
+		}).then(async (result) => {
+			if(!keepass.checkStatus(result[0], tab)) {
+				done({ ok: false, reason: "error", error: tabInfo().errorMessage || ("KeePassHttp answered with status " + result[0] + ".") });
+				return;
+			}
+			var r = JSON.parse(result[1]);
 
-				if(r.Version) {
-					keepass.currentKeePassHttp = {
-						"version": r.Version,
-						"versionParsed": parseInt(r.Version.replace(/\./g,""))
-					};
-				}
+			keepass.setCurrentKeePassHttpVersion(r.Version);
 
-				var id = r.Id;
-				if(!(await keepass.verifyResponse(r, key))) {
-					page.tabs[tab.id].errorMessage = r.integrityFailed ? keepass.integrityErrorMessage : "KeePass association failed, try again.";
-				}
-				else {
-					keepass.setCryptoKey(id, key);
-					keepass.associated.value = true;
-					keepass.associated.hash = r.Hash || 0;
-				}
+			var id = r.Id;
+			if(!(await keepass.verifyResponse(r, key))) {
+				var error = r.integrityFailed ? keepass.integrityErrorMessage : "KeePass did not confirm the pairing. The dialog was cancelled, or no name was given.";
+				tabInfo().errorMessage = error;
+				browserAction.show(null, tab);
+				done({ ok: false, reason: "refused", error: error });
+				return;
+			}
 
-				browserAction.show(callback, tab);
+			keepass.setCryptoKey(id, key);
+			keepass.associated.value = true;
+			keepass.associated.hash = r.Hash || 0;
+			browserAction.show(null, tab);
+			done({ ok: true, identifier: id });
+		}).catch((e) => {
+			if(pairing.cancelled) {
+				done({ ok: false, reason: "cancelled" });
+			} else if(e && e.kphTimeout) {
+				done({ ok: false, reason: "timeout", error: "KeePass did not answer within " + (keepass.pairingTimeout / 1000) + " seconds." });
+			} else {
+				done({ ok: false, reason: "error", error: "Unable to connect to KeePassHttp." });
 			}
 		});
 	});
 }
 
+// Stop waiting for the pairing. Firefox cannot close the dialog in KeePass:
+// the plugin stays busy until the user closes it there.
+keepass.cancelAssociate = function(callback) {
+	var pairing = keepass.pairing;
+	if(pairing) {
+		pairing.cancelled = true;
+		if(pairing.xhr) {
+			pairing.xhr.abort();
+		}
+	}
+	if(typeof callback === "function") {
+		callback(!!pairing);
+	}
+}
+
+// Connection check for the settings page. Sends a test request (with the
+// KeePass unlock prompt if triggerUnlock) and reports the state. Without
+// triggerUnlock the request has a time limit: no answer in time means
+// KeePass is busy ("busy": true), and the page keeps its last state.
+// While a pairing waits for KeePass, nothing is sent (the plugin is blocked).
+// cached: answer at once from the last known state, without a request (the
+// settings page shows the card with it while the first real check runs).
+keepass.checkConnection = function(callback, tab, triggerUnlock, cached) {
+	var reply = function(associated) {
+		var hash = (keepass.databaseHash && keepass.databaseHash !== "no-hash") ? keepass.databaseHash : null;
+		var entry = hash ? keepass.keyRing[hash] : null;
+		var version = keepass.currentKeePassHttp.version;
+		callback({
+			"pluginAvailable": keepass.isKeePassHttpAvailable,
+			"databaseClosed": keepass.isDatabaseClosed,
+			"busy": keepass.lastCheckBusy,
+			"known": keepass.stateKnown,
+			"pairingInFlight": !!keepass.pairing,
+			"version": (!version || version <= 0) ? null : String(version),
+			"testedWith": keepass.testedWithVersion,
+			"port": keepass.parsePort(page.settings.port) || keepass.defaultPort,
+			"hash": hash,
+			"paired": !!entry,
+			"associated": associated === true,
+			"identifier": entry ? entry.id : null,
+			"integrityFailed": (page.tabs[tab.id] && page.tabs[tab.id].errorMessage === keepass.integrityErrorMessage) || false,
+			"error": (page.tabs[tab.id] && page.tabs[tab.id].errorMessage) || null
+		});
+	};
+	if(keepass.pairing) {
+		reply(false);
+		return;
+	}
+	if(cached === true) {
+		reply(keepass.isAssociated());
+		return;
+	}
+	var opts = (triggerUnlock === true) ? null : { timeout: keepass.checkTimeout };
+	keepass.testAssociation(tab, triggerUnlock === true, opts).then(reply);
+}
+
 keepass.isConfigured = function() {
 	return new Promise((resolve, reject) => {
+		var usable = function(hash) {
+			var entry = keepass.keyRing[hash];
+			return !!entry && entry.status !== "lost";
+		};
 		if(typeof(keepass.databaseHash) == "undefined") {
 			keepass.getDatabaseHash().then((hash) => {
-				resolve(hash in keepass.keyRing);
+				resolve(usable(hash));
 			});
 		} else {
-			resolve(keepass.databaseHash in keepass.keyRing);
+			resolve(usable(keepass.databaseHash));
 		}
 	});
 }
@@ -279,19 +415,34 @@ keepass.isAssociated = function() {
 	return (keepass.associated.value && keepass.associated.hash && keepass.associated.hash == keepass.databaseHash);
 }
 
-keepass.sendAsync = function(request) {
+// opts (optional): timeout (ms), onXhr(xhr) to keep the request for abort().
+// Rejects with { kphTimeout }, { kphAborted } or { kphNetwork }.
+keepass.sendAsync = function(request, opts) {
+	opts = opts || {};
 	return new Promise((resolve, reject) => {
 		var xhr = new XMLHttpRequest();
 		xhr.open("POST", keepass.getPluginUrl(), true);
 		xhr.setRequestHeader("Content-Type", "application/json");
+		if(opts.timeout) {
+			xhr.timeout = opts.timeout;
+		}
 		xhr.onload = () => {
 			var size = (xhr.responseText || "").length;
 			page.debug("Response: HTTP {1}, {2} bytes", xhr.status, size);
 			resolve([xhr.status, xhr.responseText]);
 		};
-		xhr.onerror = (err) => {
-			reject(err);
+		xhr.onerror = () => {
+			reject({ kphNetwork: true });
 		};
+		xhr.ontimeout = () => {
+			reject({ kphTimeout: true });
+		};
+		xhr.onabort = () => {
+			reject({ kphAborted: true });
+		};
+		if(typeof opts.onXhr === "function") {
+			opts.onXhr(xhr);
+		}
 		try {
 			var r = JSON.stringify(request);
 			page.debug("Request: {1}", String(request.RequestType));
@@ -307,6 +458,7 @@ keepass.checkStatus = function (status, tab) {
 	var success = (status >= 200 && status <= 299);
 	var wasClosed = keepass.isDatabaseClosed;
 	var wasAvailable = keepass.isKeePassHttpAvailable;
+	keepass.stateKnown = true;
 	keepass.isDatabaseClosed = false;
 	keepass.isKeePassHttpAvailable = true;
 
@@ -347,92 +499,152 @@ keepass.checkStatus = function (status, tab) {
 	return success;
 }
 
-keepass.migrateKeyRing = () => {
-	return new Promise((resolve, reject) => {
-		browser.storage.local.get('keyRing').then((item) => {
-			var keyring = item.keyRing;
-			// change dates to numbers, for compatibilty with chrome
-			if (keyring) {
-				var num = 0;
-				for (var keyHash in keyring) {
-					var key = keyring[keyHash];
-					['created', 'lastUsed'].forEach((fld) => {
-						var v = key[fld];
-						if (v instanceof Date && v.valueOf() >= 0) {
-							key[fld] = v.valueOf();
-							num++;
-						} else if (typeof v !== 'number') {
-							key[fld] = Date.now().valueOf();
-							num++;
-						}
-					});
-				}
-				var removed = keepass.dropWeakKeys(keyring);
-				if (num > 0 || removed > 0) {
-					browser.storage.local.set({ keyRing: keyring });
-				}
-				keepass.keyRing = keyring;
-			}
-			resolve();
-		});
+// Key ring: browser.storage.local "keyRing", one entry per database hash:
+//   id           key name typed in the KeePass pairing dialog
+//   key          AES key (Base64). Removed when the entry is marked lost.
+//   keyGen       key generation (see keepass.keyGeneration)
+//   status       "ok" or "lost" (KeePass rejected the key, or the key is weak)
+//   lostReason   "rejected" | "weak" (only when lost)
+//   addedAt      time of the first pairing (ms)
+//   lastUsedAt   last successful get-logins or save (ms), missing until then
+//   description  optional note from the settings page
+//   firstFillNote  true after a pairing, until the first get-logins or "Got it"
+// An entry is deleted only by "Remove" on the settings page (removeKey).
+
+// Load the stored ring and mark weak keys (start-up).
+keepass.loadKeyRing = function() {
+	return browser.storage.local.get({'keyRing': {}}).then((item) => {
+		var keyring = item.keyRing || {};
+		if(keepass.markWeakKeys(keyring) > 0) {
+			browser.storage.local.set({ keyRing: keyring });
+		}
+		keepass.keyRing = keyring;
 	});
 };
 
 // Keys created before keyGen 2 came from Math.random() and must not be used.
-// Removing them forces a new association with a key from the CSPRNG.
+// Marking them lost forces a new association with a key from the CSPRNG.
 keepass.keyGeneration = 2;
 
 keepass.integrityErrorMessage = "KeePassHttp response failed the integrity check (HMAC). KeePassHttp 2.3.0 or newer is required.";
 
-keepass.dropWeakKeys = function(keyring) {
-	var removed = 0;
+keepass.saveKeyRing = function() {
+	return browser.storage.local.set({'keyRing': keepass.keyRing});
+}
+
+// Mark one entry lost and drop its key. The entry and its description stay.
+keepass.markLostEntry = function(entry, reason) {
+	entry.status = "lost";
+	entry.lostReason = reason;
+	delete entry.key;
+	delete entry.firstFillNote;
+}
+
+// Marks entries with an old key generation as lost ("weak"). Removes only
+// values that are not entries at all. Returns the number of changes.
+keepass.markWeakKeys = function(keyring) {
+	var changed = 0;
 	if (!keyring || typeof keyring !== "object") {
-		return removed;
+		return changed;
 	}
 	for (var hash of Object.keys(keyring)) {
-		if (!keyring[hash] || keyring[hash].keyGen !== keepass.keyGeneration) {
+		var entry = keyring[hash];
+		if (!entry || typeof entry !== "object") {
 			delete keyring[hash];
-			removed++;
+			changed++;
+		}
+		else if (entry.status !== "lost" && entry.keyGen !== keepass.keyGeneration) {
+			keepass.markLostEntry(entry, "weak");
+			changed++;
 		}
 	}
-	if (removed > 0) {
-		console.log("KeePassHttp-Neo: removed " + removed + " weak key(s); please connect to KeePass again.");
+	if (changed > 0) {
+		console.log("KeePassHttp-Link: " + changed + " weak key(s) retired; give access again on the settings page.");
 	}
-	return removed;
+	return changed;
 }
 
 keepass.saveKey = function(hash, id, key) {
-	if(!(hash in keepass.keyRing)) {
-		keepass.keyRing[hash] = {
-			"id": id,
-			"key": key,
-			"icon": "blue",
-			"created": new Date().valueOf(),
-			"lastUsed": new Date().valueOf()
+	var entry = keepass.keyRing[hash];
+	if(!entry) {
+		entry = keepass.keyRing[hash] = { "addedAt": Date.now() };
+	}
+	entry.id = id;
+	entry.key = key;
+	entry.keyGen = keepass.keyGeneration;
+	entry.status = "ok";
+	delete entry.lostReason;
+	entry.firstFillNote = true;
+	keepass.saveKeyRing();
+}
+
+// After a successful get-logins (fill = true) or save for this database.
+keepass.updateLastUsed = function(hash, fill) {
+	var entry = keepass.keyRing[hash];
+	if(entry) {
+		entry.lastUsedAt = Date.now();
+		if(fill) {
+			delete entry.firstFillNote;
+		}
+		keepass.saveKeyRing();
+	}
+}
+
+// KeePass did not recognize the key: keep the entry, mark it lost.
+keepass.markKeyLost = function(hash, reason) {
+	var entry = keepass.keyRing[hash];
+	if(entry) {
+		keepass.markLostEntry(entry, reason);
+		keepass.saveKeyRing();
+	}
+}
+
+// "Remove" on the settings page: the only path that deletes an entry.
+keepass.removeKey = function(hash) {
+	delete keepass.keyRing[hash];
+	if(keepass.associated.hash === hash) {
+		keepass.associated.value = false;
+		keepass.associated.hash = null;
+	}
+	return keepass.saveKeyRing();
+}
+
+// Settings page: change the description, or dismiss the one-time note.
+keepass.updateKeyEntry = function(hash, change) {
+	var entry = keepass.keyRing[hash];
+	if(!entry || !change || typeof change !== "object") {
+		return Promise.resolve(false);
+	}
+	if(typeof change.description === "string") {
+		var d = change.description.trim().slice(0, 200);
+		if(d) {
+			entry.description = d;
+		} else {
+			delete entry.description;
 		}
 	}
-	else {
-		keepass.keyRing[hash].id = id;
-		keepass.keyRing[hash].key = key;
+	if(change.dismissFirstFillNote === true) {
+		delete entry.firstFillNote;
 	}
-	keepass.keyRing[hash].keyGen = keepass.keyGeneration;
-	browser.storage.local.set({'keyRing': keepass.keyRing});
+	return keepass.saveKeyRing().then(() => true);
 }
 
-keepass.updateLastUsed = function(hash) {
-	if((hash in keepass.keyRing)) {
-		keepass.keyRing[hash].lastUsed = new Date().valueOf();
-		browser.storage.local.set({'keyRing': keepass.keyRing});
+// The key ring without the keys, for the settings page.
+keepass.publicKeyRing = function() {
+	var out = {};
+	for(var hash of Object.keys(keepass.keyRing)) {
+		var e = keepass.keyRing[hash];
+		out[hash] = {
+			id: e.id,
+			status: e.status === "lost" ? "lost" : "ok",
+			lostReason: e.lostReason || null,
+			addedAt: typeof e.addedAt === "number" ? e.addedAt : null,
+			lastUsedAt: typeof e.lastUsedAt === "number" ? e.lastUsedAt : null,
+			description: e.description || "",
+			firstFillNote: e.firstFillNote === true
+		};
 	}
-}
-
-keepass.deleteKey = function(hash) {
-	delete keepass.keyRing[hash];
-	browser.storage.local.set({'keyRing': keepass.keyRing});
-}
-
-keepass.getIconColor = function() {
-	return ((keepass.databaseHash in keepass.keyRing) && keepass.keyRing[keepass.databaseHash].icon) ? keepass.keyRing[keepass.databaseHash].icon : "blue";
+	return out;
 }
 
 // Returns the port as a number if it is a valid user port, else null.
@@ -459,9 +671,17 @@ keepass.setCurrentKeePassHttpVersion = function(version) {
 	}
 }
 
-keepass.testAssociation = function (tab, triggerUnlock) {
+// opts (optional) go to sendAsync, e.g. a time limit for the settings page.
+keepass.testAssociation = function (tab, triggerUnlock, opts) {
+	var tabInfo = function() {
+		return (tab && page.tabs[tab.id]) || {};
+	};
 	return new Promise((resolve, reject) => {
-		keepass.getDatabaseHash(tab, triggerUnlock).then(async () => {
+		keepass.getDatabaseHash(tab, triggerUnlock, opts).then(async () => {
+			if(keepass.lastCheckBusy) {
+				resolve(keepass.isAssociated());
+				return;
+			}
 			if(keepass.isDatabaseClosed || !keepass.isKeePassHttpAvailable) {
 				resolve(false);
 				return;
@@ -485,7 +705,7 @@ keepass.testAssociation = function (tab, triggerUnlock) {
 				return;
 			}
 
-			keepass.sendAsync(request).then(async (result) => {
+			keepass.sendAsync(request, opts).then(async (result) => {
 				var status = result[0];
 				var response = result[1];
 
@@ -493,43 +713,50 @@ keepass.testAssociation = function (tab, triggerUnlock) {
 					var r = JSON.parse(response);
 					var id = verifier[0];
 					var key = verifier[1];
-	
-					if(r.Version) {
-						keepass.currentKeePassHttp = {
-							"version": r.Version,
-							"versionParsed": parseInt(r.Version.replace(/\./g,""))
-						};
-					}
 
-				keepass.isEncryptionKeyUnrecognized = false;
+					keepass.setCurrentKeePassHttpVersion(r.Version);
+
+					keepass.isEncryptionKeyUnrecognized = false;
 					var verified = await keepass.verifyResponse(r, key, id);
 					if(!verified && r.integrityFailed) {
-						// Do not delete the key: a tampered response must not force a new
-						// association (associate sends the key in clear).
-						page.tabs[tab.id].errorMessage = keepass.integrityErrorMessage;
+						// Do not mark the key lost: a tampered response must not force a
+						// new association (associate sends the key in clear).
+						tabInfo().errorMessage = keepass.integrityErrorMessage;
 					}
 					else if(!verified) {
-						var hash = r.Hash || 0;
-						keepass.deleteKey(hash);
+						// Keep the entry and its description: the settings page shows
+						// "Access lost" and offers "Give access again".
+						keepass.markKeyLost(r.Hash || keepass.databaseHash, "rejected");
 						keepass.isEncryptionKeyUnrecognized = true;
 						console.log("Encryption key is not recognized!");
-						page.tabs[tab.id].errorMessage = "Encryption key is not recognized.";
+						tabInfo().errorMessage = "Encryption key is not recognized.";
 						keepass.associated.value = false;
 						keepass.associated.hash = null;
 					}
 					else if(!keepass.isAssociated()) {
 						console.log("Association was not successful");
-						page.tabs[tab.id].errorMessage = "Association was not successful.";
+						tabInfo().errorMessage = "Association was not successful.";
 					}
 				}
 
+				resolve(keepass.isAssociated());
+			}).catch((e) => {
+				// No change of state here: a closed kept-alive connection gives a
+				// network error too. The next database check finds a real outage.
+				if(e && e.kphTimeout) {
+					keepass.lastCheckBusy = true;
+				}
 				resolve(keepass.isAssociated());
 			});
 		});
 	});
 }
 
-keepass.getDatabaseHash = function (tab, triggerUnlock) {
+// Reads the hash of the active database (unverified test-associate). Always
+// resolves. No answer in the time limit (opts.timeout): KeePass is busy, the
+// known state stays and keepass.lastCheckBusy is true. Connection refused:
+// KeePassHttp is not available.
+keepass.getDatabaseHash = function (tab, triggerUnlock, opts) {
 	return new Promise((resolve, reject) => {
 		var request = {
 			"RequestType": "test-associate",
@@ -537,8 +764,22 @@ keepass.getDatabaseHash = function (tab, triggerUnlock) {
 		};
 
 		var oldDatabaseHash = keepass.databaseHash;
+		keepass.lastCheckBusy = false;
 
-		keepass.sendAsync(request).then((result) => {
+		var changed = function() {
+			if(oldDatabaseHash && oldDatabaseHash != keepass.databaseHash) {
+				keepass.associated.value = false;
+				keepass.associated.hash = null;
+			}
+		};
+
+		// The address at sending time. A refused connection takes about 6.4 s
+		// in Firefox on Windows: by then the port may have changed (settings
+		// page, start-up). An error from an old port says nothing about the
+		// current one and is ignored.
+		var url = keepass.getPluginUrl();
+
+		keepass.sendAsync(request, opts).then((result) => {
 			if(keepass.checkStatus(result[0], tab)) {
 				var response = JSON.parse(result[1]);
 				keepass.setCurrentKeePassHttpVersion(response.Version);
@@ -546,17 +787,25 @@ keepass.getDatabaseHash = function (tab, triggerUnlock) {
 			} else {
 				keepass.databaseHash = "no-hash";
 			}
-
-			if(oldDatabaseHash && oldDatabaseHash != keepass.databaseHash) {
-				//console.log("clear association (old db hash != new db hash ==> " + oldDatabaseHash + " != " + keepass.databaseHash);
-				keepass.associated.value = false;
-				keepass.associated.hash = null;
-			}
-
+			changed();
 			resolve(keepass.databaseHash);
 		}).catch((reason) => {
-			page.tabs[tab.id].errorMessage = "Unable to connect to KeePassHttp";
-			resolve(null);
+			if(reason && reason.kphTimeout) {
+				keepass.lastCheckBusy = true;
+				resolve(keepass.databaseHash);
+				return;
+			}
+			if(url !== keepass.getPluginUrl()) {
+				resolve(keepass.databaseHash);
+				return;
+			}
+			// Connection refused or aborted: same as no answer (status 0).
+			// This drops the logins that pages hold (see checkStatus).
+			// checkStatus only writes to a tab entry that exists.
+			keepass.checkStatus(0, tab);
+			keepass.databaseHash = "no-hash";
+			changed();
+			resolve(keepass.databaseHash);
 		});
 	});
 }
@@ -676,7 +925,8 @@ keepass.b64d = function(d) {
 }
 
 keepass.getCryptoKey = function() {
-	if(!(keepass.databaseHash in keepass.keyRing)) {
+	var entry = keepass.keyRing[keepass.databaseHash];
+	if(!entry || entry.status === "lost") {
 		return null;
 	}
 

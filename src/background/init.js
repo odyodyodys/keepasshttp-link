@@ -1,5 +1,5 @@
-// since version 2.0 the extension is using a keyRing instead of a single key-name-pair
-keepass.migrateKeyRing().then(() => {
+// Load the key ring (one entry per database), then the settings.
+keepass.loadKeyRing().then(() => {
 	// load settings
 	page.initSettings().then(() => {
 		page.initOpenedTabs().then(() => {

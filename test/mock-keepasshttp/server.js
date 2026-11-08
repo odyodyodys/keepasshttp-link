@@ -204,6 +204,7 @@ const server = http.createServer((req, resp) => {
       return resp.end();
     }
     const [code, out] = handle(r);
+    if (tamperMode === 'slow') return setTimeout(() => send(code, out), 3000);
     send(code, tamper(tamperMode, out));
   });
 });

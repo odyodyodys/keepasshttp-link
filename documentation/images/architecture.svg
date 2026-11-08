@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="40 72 1120 348" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
-<title id="t">How KeePassHttp-Neo fits together</title>
-<desc id="d">Firefox with the KeePassHttp-Neo extension connects over localhost to KeePass with the KeePassHttp plugin.</desc>
+<title id="t">How KeePassHttp-Link fits together</title>
+<desc id="d">Firefox with the KeePassHttp-Link extension connects over localhost to KeePass with the KeePassHttp plugin.</desc>
 <style>
 .box{fill:#f4f4f5;stroke:#b8b8bf}
 .win{fill:#ffffff;stroke:#b8b8bf}
@@ -11,7 +11,7 @@
 .wire{stroke:#5b5b63}.wiref{fill:#5b5b63}
 .bg{fill:#ffffff}
 .tag{fill:#1d4ed8}
-.neo{fill:#1d4ed8;stroke:#1e3a8a}.neotx{fill:#ffffff}.neomu{fill:#dbeafe}
+.link{fill:#1d4ed8;stroke:#1e3a8a}.linktx{fill:#ffffff}.linkmu{fill:#dbeafe}
 .plg{fill:#fafafa;stroke:#8a8a94}
 @media (prefers-color-scheme: dark){
 .box{fill:#161b22;stroke:#3d444d}
@@ -23,7 +23,7 @@
 .wire{stroke:#9198a1}.wiref{fill:#9198a1}
 .bg{fill:#0d1117}
 .tag{fill:#60a5fa}
-.neo{fill:#1d4ed8;stroke:#60a5fa}
+.link{fill:#1d4ed8;stroke:#60a5fa}
 .plg{fill:#161b22;stroke:#8b949e}
 }
 </style>
@@ -76,9 +76,9 @@
 
 <!-- This project -->
 <text class="tag" x="424" y="186" font-size="12" font-weight="600" letter-spacing="0.5" text-anchor="middle">THIS PROJECT</text>
-<rect class="neo" x="325.5" y="203.5" width="197" height="85" rx="15" stroke-width="3" filter="url(#sh)"/>
-<text class="neotx" x="424" y="242" font-size="17" font-weight="700" text-anchor="middle">KeePassHttp-Neo</text>
-<text class="neomu" x="424" y="263" font-size="13" text-anchor="middle">this extension</text>
+<rect class="link" x="325.5" y="203.5" width="197" height="85" rx="15" stroke-width="3" filter="url(#sh)"/>
+<text class="linktx" x="424" y="242" font-size="17" font-weight="700" text-anchor="middle">KeePassHttp-Link</text>
+<text class="linkmu" x="424" y="263" font-size="13" text-anchor="middle">this extension</text>
 
 <!-- Plugin -->
 <rect class="plg" x="676.75" y="202.75" width="198.5" height="86.5" rx="16" stroke-width="1.5" stroke-dasharray="6 4"/>

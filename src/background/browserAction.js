@@ -212,8 +212,10 @@ browserAction.setRememberPopup = function(tabId, username, password, url, userna
 		var settings = item.settings;
 		var id = tabId || page.currentTabId;
 
+		// blinkMinTimeout: -1 = page changes never close the offer (default).
+		// 0 or more = page changes count after this many ms (0 = at once).
 		var timeoutMinMillis = parseInt(getValueOrDefault(settings, "blinkMinTimeout", BLINK_TIMEOUT_REDIRECT_THRESHOLD_TIME_DEFAULT, 0)) ;
-		if (timeoutMinMillis > 0) {
+		if (timeoutMinMillis >= 0) {
 			timeoutMinMillis += Date.now();
 		}
 		var blinkTimeout = getValueOrDefault(settings, "blinkTimeout", BLINK_TIMEOUT_DEFAULT, 0);
@@ -289,14 +291,14 @@ browserAction.iconState = function(iconType, icon) {
 browserAction.setIcon = function(tabId, state) {
 	browser.browserAction.setIcon({
 		tabId: tabId,
-		imageData: kphIcon.imageData(state, keepass.getIconColor())
+		imageData: kphIcon.imageData(state)
 	}).catch(function() {
 		// The tab was closed.
 	});
 }
 
-// Redraw the icon of every known tab (new color, or the toolbar switched
-// between light and dark).
+// Redraw the icon of every known tab (the key ring changed, or the toolbar
+// switched between light and dark).
 browserAction.refreshAll = function() {
 	for(var id in page.tabs) {
 		browserAction.show(null, {"id": Number(id)});

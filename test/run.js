@@ -26,7 +26,7 @@ mkdirSync(path.join(CACHE, 'profiles'), { recursive: true });
 
 const FIREFOX = process.env.FIREFOX_BIN || 'C:\\Program Files\\Mozilla Firefox\\firefox.exe';
 const GECKODRIVER_VERSION = '0.37.1';
-const EXT_ID = 'keepasshttp-neo@odyodyodys.github.io';
+const EXT_ID = 'keepasshttp-link@odyodyodys.github.io';
 const EXT_UUID = '5b0f6f0e-6b8e-4b7e-9d55-0c1a7e5b9a01'; // fixed so we can open extension pages
 const EXT_BASE = `moz-extension://${EXT_UUID}`;
 // --real (or NO_MOCK=1): use the test KeePass (default port 19465) instead of the fake server.
@@ -402,8 +402,9 @@ const scenarios = {
     };
   },
 
-  // Item 1: a key without keyGen (made by the old Math.random code) must be
-  // removed and not used. Restores the valid key afterwards.
+  // Item 1: a key without keyGen (made by the old Math.random code) must not
+  // be used. The entry stays, marked lost ("weak"), without its key.
+  // Restores the valid key afterwards.
   async weakkey(driver) {
     await openExtPage(driver, 'options/options.html');
     const good = await readKeyRing(driver);
@@ -415,11 +416,14 @@ const scenarios = {
     await restoreKeyRing(driver, good);
     const back = await extCall(driver, 'get_status');
     await toWebTab(driver);
+    const entries = Object.values(after);
+    const marked = entries.length === Object.keys(good).length &&
+      entries.every((e) => e.status === 'lost' && e.lostReason === 'weak' && !('key' in e));
     return {
       weakKeyAccepted: !!(st.r && st.r.associated),
-      keysLeftAfterLoad: Object.keys(after).length,
+      entriesKeptAndMarked: marked,
       validKeyAcceptedAgain: !!(back.r && back.r.associated),
-      pass: !(st.r && st.r.associated) && Object.keys(after).length === 0 && !!(back.r && back.r.associated),
+      pass: !(st.r && st.r.associated) && marked && !!(back.r && back.r.associated),
     };
   },
 
@@ -919,7 +923,7 @@ scenarios.options = async function (driver) {
   await sleep(1500);
   const r = await driver.executeScript(function () {
     return {
-      yourVersion: (document.querySelector('.kphVersion em.yourVersion') || {}).textContent || null,
+      yourVersion: (document.querySelector('#tab-about em.versionKPH') || {}).textContent || null,
       updateRadios: document.querySelectorAll('input[name=checkUpdateKeePassHttp]').length,
       latestVersion: document.querySelectorAll('.latestVersion, .checkUpdateKeePassHttp').length,
     };
@@ -950,13 +954,13 @@ scenarios.smallbugs = async function (driver) {
   await openExtPage(driver, 'options/options.html');
   await sleep(1000);
   out.blink = await driver.executeAsyncScript(function (done) {
-    document.getElementById('blinkTimeout').value = '9100';
-    document.getElementById('blinkTimeoutButton').click();
+    const input = document.getElementById('opt-blinkTimeout');
+    const set = (v) => { input.value = v; input.dispatchEvent(new Event('change', { bubbles: true })); };
+    set('9.1');
     setTimeout(async () => {
       const bg = await browser.runtime.getBackgroundPage();
       const seen = String(bg.page.settings.blinkTimeout);
-      document.getElementById('blinkTimeout').value = '7500';
-      document.getElementById('blinkTimeoutButton').click();
+      set('7.5');
       setTimeout(() => done(seen), 500);
     }, 500);
   });
@@ -1272,40 +1276,9 @@ scenarios.toolbar = async function (driver) {
   await setTamper('none');
   const iconsDiffer = withLogins.icon !== locked.icon;
 
-  // Icon color per connection, set in the settings page (Connected Databases).
-  await openExtPage(driver, 'options/options.html');
-  await driver.findElement(By.css('a[href="#connected-databases"]')).click();
-  await sleep(300);
-  const row = await driver.findElement(By.css('tr[id^="tr-cd-"]'));
-  const hex = await row.findElement(By.css('input.kph-hex'));
-  await hex.sendKeys('#zz');
-  await sleep(300);
-  const invalidShown = (await hex.getAttribute('class')).includes('kph-invalid');
-  if (process.env.SHOTS) writeFileSync(path.join(ART, 'toolbar-settings.png'), await driver.takeScreenshot(), 'base64');
-  const afterInvalid = Object.values(await readKeyRing(driver)).map((k) => k.icon || 'blue');
-  await hex.clear();
-  await hex.sendKeys('#FF00AA');
-  await sleep(500);
-  const afterCustom = Object.values(await readKeyRing(driver)).map((k) => k.icon);
-  await toWebTab(driver);
-  await openPage(driver, PAGES_TLS.replace('{host}', 'multi') + '/login.html');
-  const customIcon = await toolbarIcon(driver);
-  if (process.env.SHOTS) { await shotChrome(driver, 'toolbar-custom'); writeFileSync(path.join(ART, 'toolbar-icons.json'), JSON.stringify({ choose: withLogins.icon, off: locked.icon, custom: customIcon })); }
-
-  // Back to the default with the "blue" swatch.
-  await openExtPage(driver, 'options/options.html');
-  await driver.findElement(By.css('a[href="#connected-databases"]')).click();
-  await sleep(300);
-  await (await driver.findElement(By.css('tr[id^="tr-cd-"]'))).findElement(By.css('button.kph-swatch[data-color="blue"]')).click();
-  await sleep(500);
-  const afterSwatch = Object.values(await readKeyRing(driver)).map((k) => k.icon);
-  await toWebTab(driver);
-
-  const colorOk = invalidShown && !afterInvalid.includes('#zz') && afterCustom.includes('#ff00aa') &&
-    customIcon !== withLogins.icon && afterSwatch.includes('blue');
-  return { withLogins: withLogins.popup, locked: locked.popup, iconsDiffer, invalidShown,
-    afterInvalid, afterCustom, customIconDiffers: customIcon !== withLogins.icon, afterSwatch,
-    pass: withLogins.popup === 'popup_login.html' && locked.popup === 'popup.html' && iconsDiffer && colorOk };
+  if (process.env.SHOTS) writeFileSync(path.join(ART, 'toolbar-icons.json'), JSON.stringify({ choose: withLogins.icon, off: locked.icon }));
+  return { withLogins: withLogins.popup, locked: locked.popup, iconsDiffer,
+    pass: withLogins.popup === 'popup_login.html' && locked.popup === 'popup.html' && iconsDiffer };
 };
 
 // Settings page: "Remove" asks in a native <dialog>; Cancel keeps the row,
@@ -1314,15 +1287,15 @@ scenarios.dialogs = async function (driver) {
   const url = 'https://dialog-test.localhost';
   await configure(driver, { 'defined-credential-fields': { [url]: { username: 'u', password: 'p', fields: [] } } });
   await openExtPage(driver, 'options/options.html');
-  await driver.findElement(By.css('a[href="#specified-fields"]')).click();
+  await driver.findElement(By.id('tabbtn-filling')).click();
   await sleep(300);
-  const rowCount = async () => (await driver.findElements(By.css('#tab-specified-fields tbody tr[id^="tr-scf"]'))).length;
+  const rowCount = async () => (await driver.findElements(By.css('#fields-table tbody tr[data-url]'))).length;
   const stored = async () => driver.executeAsyncScript(function (u, done) {
     browser.storage.local.get({ settings: {} }).then((it) => done(u in (it.settings['defined-credential-fields'] || {})));
   }, url);
   const rows0 = await rowCount();
   const openDialog = async () => {
-    await driver.findElement(By.css('#tab-specified-fields tbody tr[id^="tr-scf"] button.delete')).click();
+    await driver.findElement(By.css('#fields-table tbody tr[data-url] button.delete')).click();
     await sleep(300);
     return driver.executeScript("const d = document.getElementById('dialogDeleteSpecifiedCredentialFields'); return { open: d.open, name: d.querySelector('.name').textContent }");
   };
@@ -1334,11 +1307,304 @@ scenarios.dialogs = async function (driver) {
   await driver.findElement(By.css('#dialogDeleteSpecifiedCredentialFields button[value=yes]')).click();
   await sleep(500);
   const afterYes = { rows: await rowCount(), stored: await stored(),
-    emptyShown: await driver.findElement(By.css('#tab-specified-fields tr.empty')).isDisplayed() };
+    emptyShown: await driver.findElement(By.css('#fields-table tr.empty')).isDisplayed() };
   await toWebTab(driver);
   return { rows0, d1, afterCancel, d2, afterYes,
     pass: rows0 === 1 && d1.open && d1.name === url && afterCancel.rows === 1 && afterCancel.stored &&
       d2.open && afterYes.rows === 0 && !afterYes.stored && afterYes.emptyShown };
+};
+
+// Settings page: options save on change, seconds are stored as
+// milliseconds, the alert option is shown inverted, child options follow
+// their parent, the shortcuts are listed, the status card reports the state
+// (connected: state C, one row "In use now", no button, no notice).
+scenarios.settings = async function (driver) {
+  await openExtPage(driver, 'options/options.html');
+  await sleep(1500);
+  const bgSettings = () => driver.executeAsyncScript(function (done) {
+    browser.runtime.getBackgroundPage().then((bg) => done(JSON.parse(JSON.stringify(bg.page.settings))));
+  });
+  const click = async (id) => { await driver.findElement(By.id(id)).click(); await sleep(400); };
+  const out = {};
+  out.state = await driver.findElement(By.id('status-card')).getAttribute('data-state');
+  out.headline = await driver.findElement(By.id('headline')).getText();
+  out.inUse = (await driver.findElements(By.xpath("//li[contains(@class,'db-row')]//span[contains(@class,'status-word') and text()='In use now']"))).length;
+  out.actionShown = await driver.findElement(By.id('card-action')).isDisplayed();
+  out.kbd = (await driver.findElements(By.css('#shortcut-list kbd'))).length;
+  out.commandsApi = await driver.executeScript("return { keys: Object.keys(browser.commands || {}), open: typeof (browser.commands || {}).openShortcutSettings, kbdText: [...document.querySelectorAll('#shortcut-list .keys')].map((k) => k.textContent) }");
+
+  await click('details-toggle');
+  out.details = await driver.findElement(By.id('details-line')).getText();
+  // Pairing again while connected is refused with the name.
+  out.pairAgain = await driver.executeAsyncScript(function (done) {
+    browser.runtime.sendMessage({ action: 'associate' }).then((r) => done(r), (e) => done(String(e)));
+  });
+
+  // The options live on the Filling tab.
+  await driver.findElement(By.id('tabbtn-filling')).click();
+  await sleep(300);
+  out.changeShortcutsButton = await driver.findElement(By.id('change-shortcuts')).isDisplayed();
+  out.noticeInC = await driver.findElement(By.css('#tab-filling [data-notice]')).isDisplayed();
+  // Inverted option: checked means supressAlerts === false (the new default).
+  const s0 = await bgSettings();
+  out.alertCheckedDefault = await driver.findElement(By.id('opt-supressAlerts')).isSelected();
+  out.supressAlertsDefault = s0.supressAlerts;
+  await driver.findElement(By.css('label[for="opt-supressAlerts"]')).click();
+  await sleep(500);
+  out.supressAlertsAfterClick = (await bgSettings()).supressAlerts;
+  await driver.findElement(By.css('label[for="opt-supressAlerts"]')).click();
+  await sleep(500);
+
+  // Child options are disabled while the parent is off.
+  await driver.findElement(By.css('label[for="opt-autoRetrieveCredentials"]')).click();
+  await sleep(500);
+  out.childDisabled = !(await driver.findElement(By.id('opt-autoFillSingleEntry')).isEnabled());
+  out.parentOff = (await bgSettings()).autoRetrieveCredentials;
+  await driver.findElement(By.css('label[for="opt-autoRetrieveCredentials"]')).click();
+  await sleep(500);
+  out.childEnabledAgain = await driver.findElement(By.id('opt-autoFillSingleEntry')).isEnabled();
+
+  // Save offer: advanced toggle stores -1 / 2000, number fields validate.
+  await driver.findElement(By.id('tabbtn-saving')).click();
+  await driver.executeScript("document.querySelector('#tab-saving details.advanced').open = true");
+  await sleep(200);
+  out.offsetDefault = (await bgSettings()).blinkMinTimeout;
+  await driver.findElement(By.css('label[for="opt-blinkMinTimeout-on"]')).click();
+  await sleep(500);
+  out.offsetOn = (await bgSettings()).blinkMinTimeout;
+  out.offsetFieldEnabled = await driver.findElement(By.id('opt-blinkMinTimeout')).isEnabled();
+  out.invalid = await driver.executeAsyncScript(function (done) {
+    const input = document.getElementById('opt-allowedRedirect');
+    input.value = '500';
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    setTimeout(() => done(input.closest('.opt').querySelector('.save-state').textContent), 300);
+  });
+  out.allowedAfterInvalid = (await bgSettings()).allowedRedirect;
+  await driver.findElement(By.css('label[for="opt-blinkMinTimeout-on"]')).click();
+  await sleep(500);
+  out.offsetOffAgain = (await bgSettings()).blinkMinTimeout;
+  if (process.env.SHOTS) writeFileSync(path.join(ART, 'settings-saving.png'), await driver.takeScreenshot(), 'base64');
+  await toWebTab(driver);
+
+  out.pass = out.state === 'C' && /^Connected to .+\.$/.test(out.headline) && out.inUse === 1 && !out.actionShown &&
+    /^Port \d+ · KeePassHttp \S+ \(tested with 2\.3\.1\.0\)$/.test(out.details) &&
+    out.pairAgain && out.pairAgain.reason === 'already' && !out.noticeInC &&
+    out.kbd === 6 && out.changeShortcutsButton && out.commandsApi.open === 'function' &&
+    out.alertCheckedDefault === true && out.supressAlertsDefault === false && out.supressAlertsAfterClick === true &&
+    out.childDisabled && out.parentOff === false && out.childEnabledAgain &&
+    String(out.offsetDefault) === '-1' && String(out.offsetOn) === '2000' && out.offsetFieldEnabled &&
+    /Not valid/.test(out.invalid) && String(out.allowedAfterInvalid) !== '500' && String(out.offsetOffAgain) === '-1';
+  return out;
+};
+
+// Settings page: the KeePassHttp-Link and plugin boxes in the diagram open a
+// short info popover. One at a time; Escape and a click outside close it.
+scenarios.cardinfo = async function (driver) {
+  await openExtPage(driver, 'options/options.html');
+  // The card shows once the background knows the state (first check).
+  await waitFor(() => driver.executeScript("return !document.getElementById('status-card').hidden"), 15000, 200);
+  const pop = (id) => driver.executeScript(function (id) {
+    const p = document.getElementById(id);
+    const a = p.querySelector('a.pop-link');
+    return { open: !p.hidden && p.offsetHeight > 0, title: p.querySelector('.pop-title').textContent,
+      desc: p.querySelector('.pop-desc').textContent, link: a.textContent, href: a.href,
+      newTab: a.target === '_blank' && a.rel.includes('noopener'),
+      expanded: document.querySelector('[aria-controls="' + id + '"]').getAttribute('aria-expanded'),
+      focusInside: p.contains(document.activeElement) };
+  }, id);
+  const out = {};
+  out.closedAtStart = !(await pop('pop-plugin')).open && !(await pop('pop-ext')).open;
+  await driver.findElement(By.css('.diagram button.d-plugin')).click();
+  await sleep(200);
+  out.plugin = await pop('pop-plugin');
+  if (process.env.SHOTS) writeFileSync(path.join(ART, 'settings-popover-plugin.png'), await driver.takeScreenshot(), 'base64');
+  await driver.actions().sendKeys(Key.ESCAPE).perform();
+  await sleep(200);
+  out.afterEscape = { open: (await pop('pop-plugin')).open,
+    focusOnBox: await driver.executeScript("return document.activeElement.classList.contains('d-plugin')") };
+  await driver.findElement(By.css('.diagram button.d-ext')).click();
+  await sleep(200);
+  out.ext = await pop('pop-ext');
+  if (process.env.SHOTS) writeFileSync(path.join(ART, 'settings-popover-ext.png'), await driver.takeScreenshot(), 'base64');
+  await driver.findElement(By.id('headline')).click();
+  await sleep(200);
+  out.afterOutsideClick = (await pop('pop-ext')).open;
+  await toWebTab(driver);
+  out.pass = out.closedAtStart &&
+    out.plugin.open && out.plugin.title === 'KeePassHttp plugin' && out.plugin.desc === 'The KeePass side of this connection.' &&
+    out.plugin.link.trim() === 'Download page' && out.plugin.href === 'https://keepass.info/plugins.html#keepasshttp' &&
+    out.plugin.newTab && out.plugin.expanded === 'true' && out.plugin.focusInside &&
+    !out.afterEscape.open && out.afterEscape.focusOnBox &&
+    out.ext.open && out.ext.title === 'KeePassHttp-Link' && out.ext.link.trim() === 'Plugin page' &&
+    out.ext.href === 'https://github.com/odyodyodys/keepasshttp-link' && out.ext.newTab &&
+    !out.afterOutsideClick;
+  return out;
+};
+
+// Settings page: the status card shows at once when the page opens, with the
+// last state the background knows, also when KeePass answers slowly (the
+// fake server waits 3 s). The real check follows and keeps the state.
+scenarios.cardfast = async function (driver) {
+  await setTamper('slow');
+  const out = {};
+  try {
+    await openExtPage(driver, 'options/options.html'); // returns about 0.6 s after the page loaded
+    out.first = await driver.executeScript(function () {
+      const c = document.getElementById('status-card');
+      return { visible: !c.hidden && c.offsetHeight > 0, state: c.dataset.state || null,
+        msSincePageStart: Math.round(performance.now()), tabsVisible: document.querySelector('.tabs').offsetHeight > 0 };
+    });
+    await sleep(7000); // the slow real check ends
+    out.after = await driver.executeScript("return document.getElementById('status-card').dataset.state");
+
+    // As right after the extension started: the background has not seen
+    // KeePass yet. The card must not show "not answering" (state A, with
+    // its Help) for a moment; it waits for the real check.
+    await driver.executeAsyncScript(function (done) {
+      browser.runtime.getBackgroundPage().then((bg) => {
+        bg.keepass.stateKnown = false;
+        bg.keepass.isKeePassHttpAvailable = false;
+        bg.keepass.associated = { value: false, hash: null };
+        done(true);
+      });
+    });
+    await openExtPage(driver, 'options/options.html');
+    out.freshFirst = await driver.executeScript(function () {
+      const c = document.getElementById('status-card');
+      return { visible: !c.hidden, state: c.dataset.state || null, helpVisible: document.getElementById('help-body').offsetHeight > 0 };
+    });
+    await sleep(7000);
+    out.freshAfter = await driver.executeScript("return document.getElementById('status-card').dataset.state");
+  } finally {
+    await setTamper('none');
+  }
+  await toWebTab(driver);
+  out.pass = out.first.visible && out.first.state === 'C' && out.first.msSincePageStart < 2500 &&
+    out.first.tabsVisible && out.after === 'C' &&
+    out.freshFirst.state !== 'A' && !out.freshFirst.helpVisible && out.freshAfter === 'C';
+  return out;
+};
+
+// Settings page, status card: it follows KeePass by itself (polling, no
+// reload). Locked → A2 with "Unlock in KeePass", wrong port → A, back → C.
+// Description edits are saved; "Remove" → "Keep" keeps the row.
+scenarios.cardstates = async function (driver) {
+  await openExtPage(driver, 'options/options.html');
+  const card = async () => driver.executeScript(function () {
+    const c = document.getElementById('status-card');
+    const a = document.getElementById('card-action');
+    return { state: c.dataset.state, headline: document.getElementById('headline').textContent,
+      sub: document.getElementById('subline').textContent, action: a.hidden ? null : a.textContent,
+      words: [...document.querySelectorAll('.db-row .status-word')].map((w) => w.textContent),
+      notice: !document.querySelector('#tab-filling [data-notice]').hidden,
+      settingsToggle: document.getElementById('help-toggle-row').offsetHeight > 0 ? document.getElementById('help-toggle-row').textContent : null,
+      settingsVisible: document.getElementById('help-body').offsetHeight > 0 };
+  });
+  const waitState = async (want, ms = 8000) => {
+    let c;
+    for (let t = 0; t < ms; t += 300) { c = await card(); if (c.state === want) return c; await sleep(300); }
+    return c;
+  };
+  const out = {};
+  out.start = await waitState('C');
+  await setTamper('locked');
+  out.locked = await waitState('A2');
+  await setTamper('none');
+  out.back = await waitState('C');
+
+  // Wrong port through Advanced: state A, the sentence names the port.
+  await driver.findElement(By.id('advanced-toggle')).click();
+  const port = await driver.findElement(By.id('advanced-port'));
+  await port.clear();
+  await port.sendKeys('19499');
+  await driver.findElement(By.css('#advanced .port-save')).click();
+  // A refused connection to localhost takes about 6.4 s in Firefox on Windows.
+  out.wrongPort = await waitState('A', 15000);
+  // Connection settings in the card: closed until opened.
+  await driver.findElement(By.id('help-toggle-row')).click();
+  await sleep(200);
+  out.settingsOpened = await card();
+  await driver.findElement(By.id('help-toggle-row')).click();
+  // First run (no database yet): the block is closed too.
+  const ring = await readKeyRing(driver);
+  await restoreKeyRing(driver, {});
+  await openExtPage(driver, 'options/options.html');
+  out.firstRun = await waitState('A', 15000);
+  out.firstRunNeed = await driver.executeScript("return document.getElementById('need').offsetHeight > 0");
+  if (process.env.SHOTS) writeFileSync(path.join(ART, 'settings-card-A-first.png'), await driver.takeScreenshot(), 'base64');
+  await restoreKeyRing(driver, ring);
+  await openExtPage(driver, 'options/options.html');
+  out.beforeToggle = await waitFor(() => driver.executeScript(
+    "const t = document.getElementById('advanced-toggle'); return t.offsetHeight > 0 ? true : null"), 15000, 200) ||
+    await driver.executeScript("return { ring: Object.keys(options.keyRing).length, more: document.getElementById('db-more').hidden, tab: location.hash }");
+  await driver.findElement(By.id('advanced-toggle')).click();
+  if (process.env.SHOTS) writeFileSync(path.join(ART, 'settings-card-A.png'), await driver.takeScreenshot(), 'base64');
+  const port2 = await driver.findElement(By.id('advanced-port'));
+  await port2.clear();
+  await port2.sendKeys(String(EXT_PORT));
+  await driver.findElement(By.css('#advanced .port-save')).click();
+  // A check to the wrong port may still run (about 6.4 s) before the next one.
+  out.portBack = await waitState('C', 15000);
+
+  // Description: saved on Enter, kept in the key ring.
+  const desc = await driver.findElement(By.css('.db-row input.db-desc'));
+  await desc.clear();
+  await desc.sendKeys('Dummy note', Key.ENTER);
+  await sleep(500);
+  out.description = Object.values(await readKeyRing(driver)).map((k) => k.description);
+
+  // Remove asks first, Keep keeps the row.
+  await driver.findElement(By.css('.db-row button.db-remove')).click();
+  await sleep(300);
+  out.dialogTitle = await driver.findElement(By.id('dialogRemoveDatabaseTitle')).getText();
+  await driver.findElement(By.css('#dialogRemoveDatabase button[value=cancel]')).click();
+  await sleep(300);
+  out.rowsAfterKeep = (await driver.findElements(By.css('.db-row'))).length;
+  await desc.clear();
+  await desc.sendKeys(Key.ENTER);
+  await sleep(300);
+  if (process.env.SHOTS) writeFileSync(path.join(ART, 'settings-card-C.png'), await driver.takeScreenshot(), 'base64');
+  await toWebTab(driver);
+
+  out.pass = out.start.state === 'C' && out.start.words.includes('In use now') && !out.start.notice &&
+    out.locked.state === 'A2' && out.locked.action === 'Unlock in KeePass' && out.locked.words.length === 0 && out.locked.notice &&
+    out.back.state === 'C' &&
+    out.wrongPort.state === 'A' && !out.wrongPort.settingsVisible && out.wrongPort.settingsToggle === 'Connection settings ▸' &&
+    out.settingsOpened.settingsVisible && out.firstRun.state === 'A' && out.firstRunNeed &&
+    !out.firstRun.settingsVisible && out.firstRun.settingsToggle === 'Connection settings ▸' && out.settingsOpened.settingsToggle === 'Connection settings ▾' &&
+    out.wrongPort.headline === 'KeePass is not answering.' && out.wrongPort.sub.includes('port 19499') &&
+    out.portBack.state === 'C' && out.description.includes('Dummy note') &&
+    /^Remove .+ from Firefox\?$/.test(out.dialogTitle) && out.rowsAfterKeep >= 1;
+  return out;
+};
+
+// A shortcut that cannot fill shows an in-page notification (closed shadow
+// root, with the add-on icon), not a blocking alert. With the option off,
+// nothing is shown.
+scenarios.notify = async function (driver) {
+  const probe = () => driver.executeScript(function () {
+    const h = document.querySelector('kphc-notice');
+    return { present: !!h, pageSeesShadow: h ? h.shadowRoot !== null : null, alertOverridden: false };
+  });
+  const run = async () => {
+    await openPage(driver, PAGES_TLS.replace('{host}', 'multi') + '/login.html', 3000);
+    await driver.findElement(By.id('other')).click();
+    await sleep(300);
+    // Two logins, no username typed: the fill cannot choose.
+    await fireCommand(driver, 'fill-username-password');
+    await sleep(1200);
+    return probe();
+  };
+  await configure(driver, { autoFillSingleEntry: false, supressAlerts: false });
+  const shown = await run();
+  if (process.env.SHOTS) writeFileSync(path.join(ART, 'notify.png'), await driver.takeScreenshot(), 'base64');
+  await sleep(7000);
+  const later = await probe();
+  await configure(driver, { supressAlerts: true });
+  const hidden = await run();
+  await configure(driver, { supressAlerts: false });
+  return { shown, later, hidden,
+    pass: shown.present && shown.pageSeesShadow === false && !later.present && !hidden.present };
 };
 
 // ---------- main ----------
