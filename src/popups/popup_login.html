@@ -4,18 +4,38 @@
 		<meta charset="utf-8">
 		<title>KeePassHttp-Link</title>
 		<link rel="stylesheet" href="../ui.css">
-		<script src="popup_functions.js" defer></script>
+		<link rel="stylesheet" href="../tokens.css">
+		<link rel="stylesheet" href="popup.css">
+		<script src="../ui-icons.js" defer></script>
 		<script src="popup_login.js" defer></script>
 	</head>
-	<body class="popup">
-		<div id="settings" class="settings">
-			<button id="btn-options" type="button" class="small">Settings</button>
-			<button id="btn-choose-credential-fields" type="button" class="small">Choose own credential fields for this page</button>
+	<!-- Toolbar popup on a page with logins to choose from: "Choose a login".
+	     Labels only (login name and entry title), never passwords. -->
+	<body class="popup-status">
+		<header class="p-head">
+			<div class="p-brand">
+				<img src="/icons/icon.svg" width="20" height="20" alt="">
+				<span>KeePassHttp-Link</span>
+			</div>
+			<button type="button" class="p-icon-btn" id="p-settings" aria-label="Settings" title="Settings"></button>
+		</header>
+
+		<div class="p-sentence single" id="p-connected" hidden>
+			<span class="p-state-icon ok" id="p-state-icon"></span>
+			<div class="p-headline" id="p-headline"></div>
 		</div>
 
-		<div class="credentials">
-			<p>Select the login you want to fill into the page:</p>
-			<ul id="login-list" class="logins"></ul>
+		<div class="p-box">
+			<div class="p-choose-head">
+				<div class="p-choose-title" id="p-choose-title"></div>
+				<div class="p-choose-count" id="p-choose-count"></div>
+			</div>
+			<div class="p-filter" id="p-filter" hidden>
+				<span id="p-filter-icon"></span>
+				<input type="text" id="p-filter-input" aria-label="Filter logins" placeholder="Type to filter" autocomplete="off" spellcheck="false">
+			</div>
+			<div class="p-list" id="login-list" role="listbox"></div>
+			<div class="p-keys-hint">Up and down to move, Enter to fill, Esc to close</div>
 		</div>
 	</body>
 </html>

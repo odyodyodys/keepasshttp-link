@@ -19,7 +19,8 @@ All tools are installed locally (`node_modules/`, `.cache/`). No global installs
 ```sh
 cd test
 npm run test:all                 # lint + unit tests + all scenarios on the fake server
-npm test                         # all scenarios, headless, fake server
+npm test                         # all scenarios, headless, fake server, 8 workers in parallel
+npm test -- --workers=4          # 4 workers (or TEST_WORKERS=4); --workers=1 runs one after another
 npm test -- autofill single      # some scenarios
 npm run test:real                # all scenarios on the real test KeePass (see below)
 node run.js --list               # list the scenario names
@@ -31,6 +32,17 @@ SHOTS=1 DARK=1 npm test -- options    # the same in dark mode
 
 The runner prints one summary line and exits with code 1 if any scenario fails.
 Details per scenario are in `artifacts/report.json`.
+
+### Workers
+
+With the fake server, scenarios run in parallel workers (default 8). Each worker is a child
+process with its own Firefox (own temporary profile) and its own fake KeePassHttp server
+(ports 19485, 19495, ...). The test pages server (port 8080) runs once, in the parent. The parent
+hands out one scenario at a time to a free worker, so the load stays even. Scenarios that use the
+system clipboard (`clipboard`, `generator`) never run at the same time, because all Firefox
+processes share it. Each worker needs about 300 to 500 MB of memory. On a slow machine, fewer
+workers give steadier timing. The real KeePass (`--real`) always runs one scenario at a time:
+there is only one KeePass, and its dialogs block all requests.
 
 ## Notes
 

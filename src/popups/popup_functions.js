@@ -13,11 +13,15 @@ function initSettings() {
 
 	var choose = document.getElementById("btn-choose-credential-fields");
 	if(choose) {
+		// The active tab of this popup's window (not runtime.getBackgroundPage():
+		// it returns null in a private window).
 		choose.addEventListener("click", function() {
-			browser.runtime.getBackgroundPage().then(function(global) {
-				browser.tabs.sendMessage(global.page.currentTabId, {
-					action: "choose_credential_fields"
-				});
+			browser.tabs.query({ active: true, currentWindow: true }).then(function(tabs) {
+				if(tabs.length) {
+					browser.tabs.sendMessage(tabs[0].id, {
+						action: "choose_credential_fields"
+					});
+				}
 				close();
 			});
 		});

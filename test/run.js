@@ -2,10 +2,19 @@
 // drives Firefox (fresh temporary profile) with the extension from ../src
 // loaded as a temporary add-on. DUMMY DATA ONLY.
 //
-// Usage:  npm test                       (all scenarios, headless)
-//         HEADLESS=0 npm test            (visible window)
+// Usage:  npm test                       (all scenarios, headless, 8 workers)
+//         npm test -- --workers=4        (4 workers; TEST_WORKERS=4 does the same)
+//         npm test -- --workers=1        (one after another, as before)
+//         HEADLESS=0 npm test            (visible windows)
 //         npm test -- single multi       (only some scenarios)
-//         npm run test:real              (use the test KeePass, port 19465)
+//         npm run test:real              (use the test KeePass, port 19465; always one worker)
+//
+// Workers (fake server only): each worker is a child process with its own
+// Firefox and its own fake KeePassHttp server (port 19485, 19495, ...). The
+// test pages server (port 8080, stateless except the basic-auth counter that
+// one scenario uses) runs once, in the parent. The parent hands out one
+// scenario at a time to a free worker. Scenarios that use the system
+// clipboard never run at the same time.
 //
 // Output: one summary line (exit code 1 on any failure),
 //         test/artifacts/report.json and <scenario>.png
@@ -38,19 +47,33 @@ const PAGES_TLS = 'https://{host}.localhost:8080';
 const HEADLESS = process.env.HEADLESS !== '0';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// ---------- workers ----------
+// KPH_WORKER is set by the parent for its child processes.
+const IS_WORKER = process.env.KPH_WORKER !== undefined;
+const workersArg = process.argv.find((a) => a.startsWith('--workers='));
+const WORKERS = (!USE_MOCK || IS_WORKER) ? 1
+  : Math.max(1, parseInt(workersArg ? workersArg.split('=')[1] : (process.env.TEST_WORKERS || '8'), 10) || 1);
+const PARENT = !IS_WORKER && WORKERS > 1;
+
 // ---------- servers ----------
-// Mock: extension talks to the fake server directly.
+// Mock: extension talks to the fake server directly (one per worker; the
+// parent of several workers runs none).
 // Real KeePass: extension talks to a logging proxy on KPH_PORT+1.
 const EXT_PORT = USE_MOCK ? KPH_PORT : KPH_PORT + 1;
 if (USE_MOCK) {
-  process.env.MOCK_PORT = String(KPH_PORT);
-  await import('./mock-keepasshttp/server.js');
+  if (!PARENT) {
+    process.env.MOCK_PORT = String(KPH_PORT);
+    await import('./mock-keepasshttp/server.js');
+  }
 } else {
   process.env.PROXY_PORT = String(EXT_PORT);
   process.env.PROXY_TARGET = `http://localhost:${KPH_PORT}`;
   await import('./mock-keepasshttp/proxy.js');
 }
-await import('./pages/server.js');
+// Test pages: once, in the parent (workers use the parent's server).
+if (!IS_WORKER) {
+  await import('./pages/server.js');
+}
 await sleep(300);
 
 async function kphStats() {
@@ -71,7 +94,7 @@ async function startFirefox() {
   const opts = new firefox.Options()
     .setBinary(FIREFOX)
     .setPreference('extensions.webextensions.uuids', JSON.stringify({ [EXT_ID]: EXT_UUID }))
-    .setPreference('network.dns.localDomains', 'single.localhost,multi.localhost,bank.localhost,evilbank.localhost,utf8.localhost,save.localhost')
+    .setPreference('network.dns.localDomains', 'single.localhost,multi.localhost,bank.localhost,evilbank.localhost,utf8.localhost,save.localhost,steps.localhost')
     .setPreference('signon.rememberSignons', process.env.FF_PWMGR === '1')
     .setPreference('signon.autofillForms', process.env.FF_PWMGR === '1')
     .setPreference('browser.shell.checkDefaultBrowser', false)
@@ -79,6 +102,15 @@ async function startFirefox() {
     .setPreference('layout.css.prefers-color-scheme.content-override', process.env.DARK === '1' ? 0 : 1)
     .setPreference('datareporting.policy.dataSubmissionEnabled', false)
     .setPreference('app.update.auto', false)
+    // Every run starts fresh profiles (one per worker), and each would download
+    // Mozilla's background data from the internet. Not needed for the tests
+    // (all test traffic is local):
+    // 1. Remote Settings (certificate revocation data, block lists, ...):
+    //    an address that does not exist, as Mozilla's own test setup does.
+    .setPreference('services.settings.server', 'data:,#remote-settings-dummy/v1')
+    // 2. Update checks (aus5.mozilla.org) and media plugin downloads (GMP).
+    .setPreference('app.update.enabled', false)
+    .setPreference('media.gmp-manager.updateEnabled', false)
     .setAcceptInsecureCerts(true); // self-signed test certificate (test profile only)
   if (HEADLESS) opts.addArguments('-headless');
   // --allow-system-access: needed to open moz-extension:// pages from the chrome context (test profile only).
@@ -677,9 +709,9 @@ const scenarios = {
         await browser.tabs.sendMessage(tabs[0].id, { action: 'activated_tab' }).catch(() => {});
         await new Promise((r) => setTimeout(r, 2500));
         const bg = await browser.runtime.getBackgroundPage();
-        const labels = [...document.querySelectorAll('#login-list a')].map((a) => a.textContent);
+        const labels = [...document.querySelectorAll('#login-list [role=option] .p-label')].map((a) => a.textContent);
         const loginFrameId = bg.page.tabs[tabs[0].id].loginFrameId;
-        const a = document.getElementById('0');
+        const a = document.getElementById('login-0');
         if (a) a.click();
         done({ labels: labels.length, loginFrameId });
       }, (e) => done({ error: String(e) }));
@@ -917,20 +949,35 @@ scenarios.lock = async function (driver) {
 };
 
 // Item 11: options page without the online update check; it still shows the
-// plugin version (asked from the local KeePassHttp).
+// plugin version (asked from the local KeePassHttp, in Details), and the
+// add-on version next to the name in the header. The About tab has the
+// history diagram.
 scenarios.options = async function (driver) {
   await openExtPage(driver, 'options/options.html');
   await sleep(1500);
+  await driver.findElement(By.id('details-toggle')).click();
+  await driver.findElement(By.id('tabbtn-about')).click();
+  await sleep(300);
   const r = await driver.executeScript(function () {
+    const details = document.getElementById('details-line').textContent;
     return {
-      yourVersion: (document.querySelector('#tab-about em.versionKPH') || {}).textContent || null,
+      extVersion: document.getElementById('ext-version').textContent,
+      manifestVersion: browser.runtime.getManifest().version,
+      pluginVersion: (details.match(/KeePassHttp (\S+)/) || [])[1] || null,
+      historyNodes: document.querySelectorAll('#tab-about .h-node').length,
+      historyVisible: document.querySelector('#tab-about .history-map').offsetHeight > 0,
       updateRadios: document.querySelectorAll('input[name=checkUpdateKeePassHttp]').length,
       latestVersion: document.querySelectorAll('.latestVersion, .checkUpdateKeePassHttp').length,
     };
   });
-  if (process.env.SHOTS) writeFileSync(path.join(ART, 'options-general.png'), await driver.takeScreenshot(), 'base64');
+  if (process.env.SHOTS) {
+    writeFileSync(path.join(ART, 'options-about.png'), await driver.takeScreenshot(), 'base64');
+    await driver.executeScript("document.querySelector('#tab-about .history').scrollIntoView()");
+    writeFileSync(path.join(ART, 'options-about-history.png'), await driver.takeScreenshot(), 'base64');
+  }
   await toWebTab(driver);
-  r.pass = /^\d+(\.\d+)+$/.test(r.yourVersion || '') && r.updateRadios === 0 && r.latestVersion === 0;
+  r.pass = r.extVersion === 'v' + r.manifestVersion && /^\d+(\.\d+)+$/.test(r.pluginVersion || '') &&
+    r.historyNodes === 7 && r.historyVisible && r.updateRadios === 0 && r.latestVersion === 0;
   return r;
 };
 
@@ -940,14 +987,17 @@ scenarios.smallbugs = async function (driver) {
   const out = {};
   await openExtPage(driver, 'popups/popup.html');
   await sleep(1000);
+  // Names from the key ring and the site name are inserted as text, not HTML.
   out.popup = await driver.executeScript(function () {
-    status_response({ keePassHttpAvailable: false, error: '<b id="injected">E</b>' });
-    const a = document.getElementById('error-message').textContent;
-    status_response({ keePassHttpAvailable: true, configured: true, associated: true, identifier: '<i id="injected2">x</i>' });
+    kphPopup.render({
+      status: { pluginAvailable: true, databaseClosed: false, hash: 'h1', associated: true },
+      ring: { h1: { id: '<i id="injected2">x</i>', status: 'ok' } },
+      summary: { supported: true, site: '<b id="injected">E</b>', logins: 2 },
+    });
     return {
       injected: !!document.getElementById('injected') || !!document.getElementById('injected2'),
-      errorText: a,
-      identifierText: document.getElementById('associated-identifier').textContent,
+      errorText: document.getElementById('p-site-name').textContent,
+      identifierText: document.querySelector('#p-headline .chip').textContent,
     };
   });
   if (process.env.SHOTS) writeFileSync(path.join(ART, 'popup-main.png'), await driver.takeScreenshot(), 'base64');
@@ -986,7 +1036,8 @@ scenarios.csp = async function (driver) {
   // Proof that the CSP is enforced: an inline style attribute has no effect here.
   const cspActive = await driver.executeScript("const x = document.createElement('div'); x.setAttribute('style', 'color: rgb(1, 2, 3)'); document.body.appendChild(x); const c = getComputedStyle(x).color; x.remove(); return c !== 'rgb(1, 2, 3)';");
   return { cspActive, items: d.items, border, pageSeesShadow: d.pageSeesShadow, passwordLen: s.passwordLen,
-    pass: cspActive && d.items.length === 2 && border === 'rgb(170, 170, 170)' && d.pageSeesShadow === false && s.passwordLen > 0 };
+    // The design border (light or dark): proof that the CSSOM styles apply under the CSP.
+    pass: cspActive && d.items.length === 2 && ['rgb(207, 207, 216)', 'rgb(82, 82, 94)'].includes(border) && d.pageSeesShadow === false && s.passwordLen > 0 };
 };
 
 // Item 17b: password generator in closed shadow roots, on a strict-CSP page.
@@ -1010,16 +1061,22 @@ scenarios.generator = async function (driver) {
   await sleep(1500);
   const sr = await (await driver.findElement(By.css('kphc-pwgen'))).getShadowRoot();
   const generated = String(await (await sr.findElement(By.css('input[type=text]'))).getProperty('value'));
-  const buttons = await sr.findElements(By.css('button'));
-  let fillBtn = null;
-  for (const b of buttons) if ((await b.getText()).startsWith('Fill in')) fillBtn = b;
-  await fillBtn.click();
+  const button = async (text) => {
+    for (const b of await sr.findElements(By.css('button'))) if ((await b.getText()) === text) return b;
+    return null;
+  };
+  // "Copy" puts the password on the clipboard, "Fill" fills the field and closes.
+  await (await button('Copy')).click();
+  await sleep(500);
+  const clip = await readClipboard(driver);
+  await (await button('Fill')).click();
   await sleep(800);
   const fieldValue = await driver.executeScript("return document.getElementById('password').value");
-  const clip = await readClipboard(driver);
-  return { iconSize: [iconSize.width, iconSize.height], generatedLen: generated.length,
+  const closed = !(await (await sr.findElement(By.css('[role=dialog]'))).isDisplayed());
+  const strength = await (await sr.findElement(By.css('[role=img]'))).getAttribute('aria-label');
+  return { iconSize: [iconSize.width, iconSize.height], generatedLen: generated.length, strength, closed,
     fieldMatches: fieldValue === generated, clipboardMatches: clip === generated,
-    pass: iconSize.width === 16 && generated.length > 0 && fieldValue === generated && clip === generated };
+    pass: [16, 22].includes(iconSize.width) && generated.length > 0 && fieldValue === generated && clip === generated && closed };
 };
 
 // Values and dropdown inside #frame, after focusing its username field.
@@ -1168,7 +1225,7 @@ scenarios.clipboard = async function (driver) {
   const sr = await (await driver.findElement(By.css('kphc-pwgen'))).getShadowRoot();
   const generated = String(await (await sr.findElement(By.css('input[type=text]'))).getProperty('value'));
   for (const b of await sr.findElements(By.css('button'))) {
-    if ((await b.getText()) === 'Copy to clipboard') { await b.click(); break; }
+    if ((await b.getText()) === 'Copy') { await b.click(); break; }
   }
   await sleep(500);
   const message = await (await sr.findElement(By.css('[role=status]'))).getText();
@@ -1344,6 +1401,10 @@ scenarios.settings = async function (driver) {
   await driver.findElement(By.id('tabbtn-filling')).click();
   await sleep(300);
   out.changeShortcutsButton = await driver.findElement(By.id('change-shortcuts')).isDisplayed();
+  if (process.env.SHOTS) {
+    await driver.executeScript("document.getElementById('shortcut-list').scrollIntoView({ block: 'center' })");
+    writeFileSync(path.join(ART, 'settings-filling.png'), await driver.takeScreenshot(), 'base64');
+  }
   out.noticeInC = await driver.findElement(By.css('#tab-filling [data-notice]')).isDisplayed();
   // Inverted option: checked means supressAlerts === false (the new default).
   const s0 = await bgSettings();
@@ -1394,6 +1455,216 @@ scenarios.settings = async function (driver) {
     out.childDisabled && out.parentOff === false && out.childEnabledAgain &&
     String(out.offsetDefault) === '-1' && String(out.offsetOn) === '2000' && out.offsetFieldEnabled &&
     /Not valid/.test(out.invalid) && String(out.allowedAfterInvalid) !== '500' && String(out.offsetOffAgain) === '-1';
+  return out;
+};
+
+// Two-step sign-in without <form> (Google style, dummy data): KeePass is asked
+// on the username step (autocomplete "username") and again when the password
+// field appears without a page load. On the password step the account in the
+// hidden field comes first and fills only the password; with "fill without
+// asking" on, it is filled at once.
+scenarios.steps = async function (driver) {
+  const url = PAGES_TLS.replace('{host}', 'steps') + '/login-steps.html';
+  const pwValue = () => driver.executeScript("const p = document.querySelector('input[name=Passwd]'); return p ? p.value : null");
+  const out = {};
+  await configure(driver, { autoFillSingleEntry: false });
+  await kphReset();
+  await openPage(driver, url, 3000);
+  out.step1Requests = (await kphStats())?.byType['get-logins'] ?? 0;
+  await driver.findElement(By.id('identifierId')).click();
+  await sleep(1200);
+  out.step1Items = (await dropdownState(driver)).items;
+  await driver.findElement(By.id('identifierId')).sendKeys(Key.ESCAPE);
+  await driver.findElement(By.id('next')).click();
+  await sleep(3000);
+  out.step2Requests = (await kphStats())?.byType['get-logins'] ?? 0;
+  await driver.findElement(By.css('input[name=Passwd]')).click();
+  await sleep(1200);
+  out.step2Items = (await dropdownState(driver)).items;
+  await clickDropdownItem(driver, 0);
+  await sleep(1000);
+  out.step2Filled = await pwValue();
+
+  // "Fill without asking": the account named by the page is filled at once.
+  await configure(driver, { autoFillSingleEntry: true });
+  await openPage(driver, url, 3000);
+  out.autoStep1Username = await driver.executeScript("return document.getElementById('identifierId').value");
+  await driver.findElement(By.id('next')).click();
+  await sleep(3000);
+  out.autoFilled = await pwValue();
+  await configure(driver, { autoFillSingleEntry: false });
+
+  out.pass = out.step1Requests === 1 && out.step1Items.length === 2 && out.step2Requests === 2 &&
+    out.step2Items.length === 2 && out.step2Items[0].startsWith('user-b@example.test') &&
+    out.step2Filled === 'Dummy-Pass-SB' && out.autoStep1Username === '' && out.autoFilled === 'Dummy-Pass-SB';
+  return out;
+};
+
+// Two-step sign-in: a login picked from the list on the username step fills
+// its password on the password step ("fill without asking" off). If the page
+// then names another account (typed by hand), nothing is filled.
+scenarios.steppick = async function (driver) {
+  const url = PAGES_TLS.replace('{host}', 'steps') + '/login-steps.html';
+  const pwValue = () => driver.executeScript("const p = document.querySelector('input[name=Passwd]'); return p ? p.value : null");
+  const pickFirst = async () => {
+    await driver.findElement(By.id('identifierId')).click();
+    await sleep(1200);
+    const items = (await dropdownState(driver)).items;
+    await clickDropdownItem(driver, 0);
+    await sleep(500);
+    return items;
+  };
+  const out = {};
+  await configure(driver, { autoFillSingleEntry: false });
+  await openPage(driver, url, 3000);
+  out.items = await pickFirst();
+  out.picked = await driver.executeScript("return document.getElementById('identifierId').value");
+  await driver.findElement(By.id('next')).click();
+  await sleep(3000);
+  out.filled = await pwValue();
+
+  // Picked user-a, then typed user-b: the page names user-b, no fill.
+  await openPage(driver, url, 3000);
+  await pickFirst();
+  const id = await driver.findElement(By.id('identifierId'));
+  await id.clear();
+  await id.sendKeys('user-b@example.test', Key.ESCAPE);
+  await driver.findElement(By.id('next')).click();
+  await sleep(3000);
+  out.otherAccount = await pwValue();
+
+  out.pass = out.items[0].startsWith('user-a@example.test') && out.picked === 'user-a@example.test' &&
+    out.filled === 'Dummy-Pass-SA' && out.otherAccount === '';
+  return out;
+};
+
+// Sign-up page (dummy): new-password fields get the generator but no request
+// to KeePass and no fill; the one-time-code field (type password here) gets
+// neither.
+scenarios.kinds = async function (driver) {
+  await configure(driver, { autoFillSingleEntry: true });
+  await kphReset();
+  await openPage(driver, PAGES_TLS.replace('{host}', 'steps') + '/login-kinds.html', 3500);
+  const out = {};
+  out.requests = (await kphStats())?.byType['get-logins'] ?? 0;
+  out.keyIcons = (await driver.findElements(By.css('kphc-key'))).length;
+  out.values = await driver.executeScript("return ['email', 'pw1', 'pw2', 'otp'].map((id) => document.getElementById(id).value.length)");
+  // The generator icon of the one-time-code field would sit at its right end.
+  out.iconOnOtp = await driver.executeScript(function () {
+    const r = document.getElementById('otp').getBoundingClientRect();
+    return [...document.querySelectorAll('kphc-key')].some((k) => { const i = k.getBoundingClientRect(); return i.top >= r.top - 2 && i.bottom <= r.bottom + 2 && i.left >= r.left && i.right <= r.right + 2; });
+  });
+  await configure(driver, { autoFillSingleEntry: false });
+  out.pass = out.requests === 0 && out.keyIcons === 2 && out.values.every((n) => n === 0) && !out.iconOnOtp;
+  return out;
+};
+
+// In-page list and generator (design "In page"), and the "Choose a login"
+// popup on a page with two logins: header, rows, keys, no filter for two.
+scenarios.chooser = async function (driver) {
+  await configure(driver, { autoFillSingleEntry: false });
+  await openPage(driver, PAGES_TLS.replace('{host}', 'multi') + '/login.html', 3500);
+  const out = {};
+  await driver.findElement(By.id('username')).click();
+  await sleep(1200);
+  out.dropdown = await dropdownState(driver);
+  out.fillIcons = (await driver.findElements(By.css('kphc-fill'))).length; // removed: must stay 0
+  if (process.env.SHOTS) writeFileSync(path.join(ART, 'inpage-suggest.png'), await driver.takeScreenshot(), 'base64');
+  await driver.findElement(By.id('username')).sendKeys(Key.ESCAPE);
+  await driver.findElement(By.css('kphc-key')).click();
+  await sleep(1500);
+  if (process.env.SHOTS) writeFileSync(path.join(ART, 'inpage-generator.png'), await driver.takeScreenshot(), 'base64');
+  const gsr = await (await driver.findElement(By.css('kphc-pwgen'))).getShadowRoot();
+  await (await gsr.findElement(By.css('input[type=text]'))).sendKeys(Key.ESCAPE);
+  await sleep(300);
+
+  const popup = await openTabBehind(driver, 'popups/popup_login.html');
+  await sleep(1500);
+  await driver.switchTo().window(popup);
+  const read = () => driver.executeScript(function () {
+    return { title: document.getElementById('p-choose-title').textContent, count: document.getElementById('p-choose-count').textContent,
+      rows: [...document.querySelectorAll('#login-list [role=option] .p-label')].map((x) => x.textContent),
+      selected: [...document.querySelectorAll('#login-list [role=option]')].findIndex((x) => x.getAttribute('aria-selected') === 'true'),
+      filter: !document.getElementById('p-filter').hidden };
+  });
+  out.popup = await read();
+  await driver.actions().sendKeys(Key.ARROW_DOWN).perform();
+  await sleep(200);
+  out.afterDown = (await read()).selected;
+  if (process.env.SHOTS) writeFileSync(path.join(ART, 'popup-choose.png'), await driver.takeScreenshot(), 'base64');
+  await closeTabIfOpen(driver, popup);
+  await toWebTab(driver);
+  out.pass = out.dropdown.items.length === 2 && out.fillIcons === 0 &&
+    out.popup.title === 'Fill the sign-in fields on multi.localhost with' && out.popup.count === '2 logins' &&
+    out.popup.rows.length === 2 && out.popup.selected === 0 && !out.popup.filter && out.afterDown === 1;
+  return out;
+};
+
+// Toolbar popup (status): it follows KeePass by itself (C, locked A2, back
+// to C), and each state from the design draws its headline, its one action
+// and, when connected on a web page, the site box with the login count.
+scenarios.popupstates = async function (driver) {
+  await openExtPage(driver, 'popups/popup.html');
+  const view = () => driver.executeScript(function () {
+    const b = document.getElementById('p-body');
+    const vis = (id) => !document.getElementById(id).hidden;
+    return { state: b.hidden ? null : b.dataset.state, headline: document.getElementById('p-headline').textContent,
+      sub: vis('p-sub') ? document.getElementById('p-sub').textContent : null,
+      action: vis('p-action') ? document.getElementById('p-action').textContent : null,
+      steps: vis('p-steps'), stepsAction: vis('p-steps-action'), cancel: vis('p-cancel'),
+      site: vis('p-site') ? document.getElementById('p-site-name').textContent + ' | ' + document.getElementById('p-site-count').textContent : null,
+      none: vis('p-none') ? document.getElementById('p-none-title').textContent : null,
+      noneActions: vis('p-none-actions') };
+  });
+  const waitState = async (want, ms = 15000) => {
+    let v;
+    for (let t = 0; t < ms; t += 300) { v = await view(); if (v.state === want) return v; await sleep(300); }
+    return v;
+  };
+  const out = {};
+  out.live = await waitState('C');
+  await setTamper('locked');
+  out.locked = await waitState('A2');
+  await setTamper('none');
+  out.back = await waitState('C');
+
+  // Each state drawn from fixed data (as the background would report it).
+  const ok = { pluginAvailable: true, databaseClosed: false, port: 19455 };
+  const ring = { h1: { id: 'Work', status: 'ok', lastUsedAt: 2 } };
+  const cases = {
+    A: [{ pluginAvailable: false, port: 19455 }, {}, null, false],
+    B: [Object.assign({ hash: 'h9' }, ok), {}, null, false],
+    Bwait: [Object.assign({ hash: 'h9' }, ok), ring, null, true],
+    A2: [{ pluginAvailable: true, databaseClosed: true }, ring, null, false],
+    C: [Object.assign({ hash: 'h1', associated: true }, ok), ring, { supported: true, site: 'github.com', logins: 2 }, false],
+    Cother: [Object.assign({ hash: 'h1', associated: true }, ok), ring, { supported: false, site: null, logins: 0 }, false],
+    Cnone: [Object.assign({ hash: 'h1', associated: true }, ok), ring, { supported: true, site: 'github.com', logins: 0 }, false],
+    Cnoform: [Object.assign({ hash: 'h1', associated: true }, ok), ring, { supported: true, site: 'example.com', asked: false, logins: 0 }, false],
+    B2: [Object.assign({ hash: 'h9' }, ok), ring, null, false],
+    B3: [Object.assign({ hash: 'h1' }, ok), { h1: { id: 'Work', status: 'lost', lostReason: 'rejected' } }, null, false],
+  };
+  out.drawn = {};
+  for (const [name, [status, r, summary, pairing]] of Object.entries(cases)) {
+    await driver.executeScript(function (status, ring, summary, pairing) {
+      clearTimeout(kphPopup.timer); kphPopup.checking = true; // stop polling while drawing
+      kphPopup.render({ status: status, ring: ring, summary: summary, pairing: pairing });
+    }, status, r, summary, pairing);
+    out.drawn[name] = await view();
+    if (process.env.SHOTS) writeFileSync(path.join(ART, 'popup-' + name + '.png'), await driver.takeScreenshot(), 'base64');
+  }
+  await toWebTab(driver);
+  const d = out.drawn;
+  out.pass = out.live.state === 'C' && out.locked.state === 'A2' && out.locked.action === 'Unlock in KeePass' && out.back.state === 'C' &&
+    d.A.headline === 'KeePass is not answering.' && d.A.steps && !d.A.stepsAction && d.A.sub === 'Firefox cannot reach the KeePassHttp plugin on port 19455.' &&
+    d.B.headline === 'KeePass is running.' && d.B.steps && d.B.stepsAction &&
+    d.Bwait.headline === 'Waiting for KeePass…' && d.Bwait.cancel && !d.Bwait.action &&
+    d.A2.headline === 'Your database is locked.' && d.A2.action === 'Unlock in KeePass' &&
+    d.C.headline === 'Connected to Work' && d.C.site === 'github.com | 2 logins' && !d.C.action &&
+    d.Cother.state === 'C' && d.Cother.site === null && d.Cother.none === null &&
+    d.Cnone.site === null && d.Cnone.none === 'No logins for github.com in Work' &&
+    !d.Cnone.noneActions && d.Cnoform.none === 'No sign-in form found on example.com' && d.Cnoform.noneActions &&
+    d.B2.headline === 'Another database is open in KeePass.' && d.B2.action === 'Give Firefox access' && /switch KeePass back to Work\.$/.test(d.B2.sub) &&
+    d.B3.headline === 'Firefox lost access to Work.' && d.B3.action === 'Give access again';
   return out;
 };
 
@@ -1611,35 +1882,163 @@ scenarios.notify = async function (driver) {
 if (process.argv.includes('--list')) { console.log(Object.keys(scenarios).join(' ')); process.exit(0); }
 const wanted = process.argv.slice(2).filter((a) => scenarios[a]);
 const names = wanted.length ? wanted : Object.keys(scenarios);
-const report = { firefox: null, startedAt: new Date().toISOString(), mock: USE_MOCK, port: KPH_PORT, results: {} };
-let driver;
-try {
-  driver = await startFirefox();
-  const caps = await driver.getCapabilities();
-  report.firefox = caps.get('browserVersion');
-  await configure(driver, {});
-  report.association = await associate(driver);
-  for (const n of names) {
-    try {
-      report.results[n] = await scenarios[n](driver);
-    } catch (e) {
-      report.results[n] = { error: String(e && e.stack || e) };
-    }
-    try {
-      writeFileSync(path.join(ART, `${n}.png`), await driver.takeScreenshot(), 'base64');
-    } catch { /* ignore */ }
-  }
-} catch (e) {
-  report.fatal = String(e && e.stack || e);
-  try { report.requestTimeline = timeline(await kphStats()); } catch { /* ignore */ }
-} finally {
-  if (driver) await driver.quit().catch(() => {});
+
+// Writes report.json, prints the summary line, exits (1 on any failure).
+function finish(report) {
   writeFileSync(path.join(ART, 'report.json'), JSON.stringify(report, null, 2));
   // Short summary; details are in artifacts/report.json.
   const failed = Object.entries(report.results).filter(([, v]) => v.error || v.pass === false).map(([k]) => k);
   const secs = Math.round((Date.now() - Date.parse(report.startedAt)) / 1000);
   console.log(`${USE_MOCK ? 'fake server' : 'KeePass port ' + KPH_PORT}: ` +
     `${Object.keys(report.results).length - failed.length}/${names.length} passed in ${secs}s` +
+    (report.workers > 1 ? ` (${report.workers} workers)` : '') +
     (failed.length ? `; FAILED: ${failed.join(', ')}` : '') + (report.fatal ? `; FATAL: ${report.fatal.split('\n')[0]}` : ''));
   process.exit(report.fatal || failed.length ? 1 : 0);
+}
+
+// One Firefox, all scenarios one after another (also: the real KeePass).
+async function runSerial() {
+  const report = { firefox: null, startedAt: new Date().toISOString(), mock: USE_MOCK, port: KPH_PORT, workers: 1, results: {} };
+  let driver;
+  try {
+    driver = await startFirefox();
+    const caps = await driver.getCapabilities();
+    report.firefox = caps.get('browserVersion');
+    await configure(driver, {});
+    report.association = await associate(driver);
+    for (const n of names) {
+      try {
+        report.results[n] = await scenarios[n](driver);
+      } catch (e) {
+        report.results[n] = { error: String(e && e.stack || e) };
+      }
+      try {
+        writeFileSync(path.join(ART, `${n}.png`), await driver.takeScreenshot(), 'base64');
+      } catch { /* ignore */ }
+    }
+  } catch (e) {
+    report.fatal = String(e && e.stack || e);
+    try { report.requestTimeline = timeline(await kphStats()); } catch { /* ignore */ }
+  } finally {
+    if (driver) await driver.quit().catch(() => {});
+    finish(report);
+  }
+}
+
+// Child process: set up one Firefox, then run the scenarios the parent sends.
+async function runWorker() {
+  let driver;
+  const quit = async (code) => {
+    if (driver) await driver.quit().catch(() => {});
+    process.exit(code);
+  };
+  try {
+    driver = await startFirefox();
+    const caps = await driver.getCapabilities();
+    await configure(driver, {});
+    const association = await associate(driver);
+    process.send({ type: 'ready', firefox: caps.get('browserVersion'), association });
+  } catch (e) {
+    process.send({ type: 'fatal', error: String(e && e.stack || e) });
+    await quit(1);
+    return;
+  }
+  process.on('message', async (m) => {
+    if (m.type === 'stop') {
+      await quit(0);
+      return;
+    }
+    if (m.type !== 'run') return;
+    let result;
+    try {
+      result = await scenarios[m.name](driver);
+    } catch (e) {
+      result = { error: String(e && e.stack || e) };
+    }
+    try {
+      writeFileSync(path.join(ART, `${m.name}.png`), await driver.takeScreenshot(), 'base64');
+    } catch { /* ignore */ }
+    process.send({ type: 'result', name: m.name, result });
+  });
+  // The parent is gone (e.g. Ctrl+C): close Firefox.
+  process.on('disconnect', () => { quit(1); });
+}
+
+// Parent: starts the workers and hands out one scenario at a time to a free
+// worker. Scenarios that use the system clipboard (shared by all Firefox
+// processes) never run at the same time. The slowest scenario goes first.
+const CLIPBOARD_SCENARIOS = new Set(['clipboard', 'generator']);
+async function runParallel() {
+  const { fork } = await import('node:child_process');
+  const count = Math.min(WORKERS, names.length);
+  const report = { firefox: null, startedAt: new Date().toISOString(), mock: USE_MOCK, workers: count, results: {} };
+  const queue = names.slice().sort((a, b) => (b === 'clipboard') - (a === 'clipboard'));
+  let clipboardBusy = false;
+  const workerErrors = [];
+
+  await new Promise((allDone) => {
+    let alive = count;
+    for (let i = 0; i < count; i++) {
+      const child = fork(fileURLToPath(import.meta.url), [], {
+        env: Object.assign({}, process.env, { KPH_WORKER: String(i), KPH_PORT: String(KPH_PORT + 10 * (i + 1)) }),
+        stdio: ['ignore', 'ignore', 'inherit', 'ipc'],
+      });
+      let current = null;
+      let waitTimer = null;
+      const next = () => {
+        waitTimer = null;
+        const at = queue.findIndex((n) => !(CLIPBOARD_SCENARIOS.has(n) && clipboardBusy));
+        if (at < 0) {
+          if (queue.length === 0) {
+            child.send({ type: 'stop' });
+          } else {
+            waitTimer = setTimeout(next, 500); // only clipboard scenarios left, one is running
+          }
+          return;
+        }
+        current = queue.splice(at, 1)[0];
+        if (CLIPBOARD_SCENARIOS.has(current)) clipboardBusy = true;
+        child.send({ type: 'run', name: current });
+      };
+      child.on('message', (m) => {
+        if (m.type === 'ready') {
+          report.firefox = report.firefox || m.firefox;
+          report.association = report.association || m.association;
+          next();
+        } else if (m.type === 'result') {
+          report.results[m.name] = m.result;
+          if (CLIPBOARD_SCENARIOS.has(m.name)) clipboardBusy = false;
+          current = null;
+          next();
+        } else if (m.type === 'fatal') {
+          workerErrors.push(`worker ${i}: ${m.error.split('\n')[0]}`);
+        }
+      });
+      child.on('exit', () => {
+        if (waitTimer) clearTimeout(waitTimer);
+        if (current) {
+          report.results[current] = { error: `worker ${i} stopped during this scenario` };
+          if (CLIPBOARD_SCENARIOS.has(current)) clipboardBusy = false;
+        }
+        alive--;
+        if (alive === 0) allDone();
+      });
+    }
+  });
+
+  // Same order as the scenario list; anything left was never run.
+  const ordered = {};
+  for (const n of names) ordered[n] = report.results[n] || { error: 'not run (no worker could start)' };
+  report.results = ordered;
+  if (workerErrors.length) report.workerErrors = workerErrors;
+  if (workerErrors.length === count) report.fatal = workerErrors.join('\n');
+  finish(report);
+}
+
+if (PARENT) {
+  await runParallel();
+} else if (IS_WORKER) {
+  await runWorker();
+} else {
+  await runSerial();
 }

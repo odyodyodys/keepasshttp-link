@@ -19,6 +19,11 @@ cipevent.onMessage = function(request, sender, callback) {
 	// Extension page (popup, options): it acts on the current tab.
 	var tabId = (sender.tab && sender.tab.id >= 1) ? sender.tab.id : page.currentTabId;
 	var args = Array.isArray(request.args) ? request.args : [];
+	// Toolbar popups name the tab they are about (the active tab of their own
+	// window): the background's current tab can be out of date.
+	if(cipevent.tabArgActions && cipevent.tabArgActions[request.action] === true && typeof args[0] === "number" && args[0] >= 1) {
+		tabId = args[0];
+	}
 	cipevent.invoke(cipevent.messageHandlers[request.action], callback, tabId, args);
 
 	// onMessage closes channel for callback automatically
@@ -106,15 +111,35 @@ cipevent.onContentMessage = function(request, sender, callback) {
 		case "page_clear_logins":
 			delete tabInfo.knownLogins[frameId];
 			delete tabInfo.secrets[frameId];
+			args = [frameId];
 			break;
 		case "get_secret":
 			callback(senderPolicy.secretFor(tabInfo, frameId, origin, a[0]));
+			return true;
+		// Two-step sign-in: the user picked a login on the username step. Keep only
+		// its name (no password), for this tab and site, for a short time. Only a
+		// login KeePass gave this frame is accepted.
+		case "remember_pick":
+			var picked = senderPolicy.str(a[0]);
+			var known = tabInfo.knownLogins[frameId] || [];
+			if(origin && picked && known.some(function(l) { return l.Login === picked; })) {
+				tabInfo.pick = { origin: origin, login: picked, at: Date.now() };
+			}
+			return;
+		// Password step: the pick, once, only for the same site and in time.
+		case "take_pick":
+			var pick = tabInfo.pick;
+			delete tabInfo.pick;
+			callback((pick && origin && pick.origin === origin && Date.now() - pick.at <= cipevent.PICK_TTL_MS) ? { login: pick.login } : null);
 			return true;
 		case "alert":
 			args = [senderPolicy.text(a[0], 1000)];
 			break;
 		case "generate_password":
 			args = [a[0] === true];
+			break;
+		case "open_settings":
+			args = [a[0] === "generator" ? "generator" : "databases"];
 			break;
 		case "load_settings":
 			var replySettings = callback;
@@ -147,7 +172,15 @@ cipevent.onContentMessage = function(request, sender, callback) {
  * @returns null (asynchronous)
  */
 cipevent.invoke = function(handler, callback, senderTabId, args, secondTime) {
+	// No usable tab: answer with nothing, never leave the sender waiting (a
+	// toolbar popup would wait for ever, e.g. with an out-of-date current tab).
+	var noAnswer = function() {
+		if(typeof callback === "function") {
+			callback(undefined);
+		}
+	};
 	if(senderTabId < 1) {
+		noAnswer();
 		return;
 	}
 
@@ -160,6 +193,7 @@ cipevent.invoke = function(handler, callback, senderTabId, args, secondTime) {
 
 	browser.tabs.get(senderTabId).then(function(tab) {
 		if(!tab) {
+			noAnswer();
 			return;
 		}
 
@@ -170,6 +204,8 @@ cipevent.invoke = function(handler, callback, senderTabId, args, secondTime) {
 				window.setTimeout(function() {
 					cipevent.invoke(handler, callback, senderTabId, args, true);
 				}, 250);
+			} else {
+				noAnswer();
 			}
 			return;
 		}
@@ -189,7 +225,7 @@ cipevent.invoke = function(handler, callback, senderTabId, args, secondTime) {
 		else {
 			console.log("undefined handler for tab " + tab.id);
 		}
-	});
+	}, noAnswer); // the tab no longer exists
 }
 
 // The content script shows its own notification (cip.notify). This action is
@@ -235,6 +271,78 @@ cipevent.onLoadKeyRing = function(callback, tab) {
 // known database, or nothing).
 cipevent.onAssociate = function(callback, tab, expectedHash) {
 	keepass.associate(callback, tab, typeof expectedHash === "string" ? expectedHash : null);
+}
+
+// Toolbar popup: the current tab's site and how many logins KeePass gave
+// its top frame. No login data, only a count.
+cipevent.onGetPageSummary = function(callback, tab) {
+	var supported = false;
+	var site = null;
+	try {
+		var u = new URL(tab.url);
+		supported = (u.protocol === "https:" || u.protocol === "http:");
+		site = supported ? u.hostname : null;
+	} catch(e) { /* no URL: not supported */ }
+	var t = page.tabs[tab.id];
+	// asked: a frame of this tab found a sign-in form and asked KeePass.
+	// logins: what KeePass returned, all frames together.
+	var asked = false;
+	var logins = 0;
+	if(t && t.knownLogins) {
+		Object.keys(t.knownLogins).forEach(function(frameId) {
+			if(Array.isArray(t.knownLogins[frameId])) {
+				asked = true;
+				logins += t.knownLogins[frameId].length;
+			}
+		});
+	}
+	// choose: the login list (popup_login.html) has entries for this tab.
+	var choose = (t && Array.isArray(t.loginList)) ? t.loginList.length : 0;
+	callback({ supported: supported, site: site, asked: asked, logins: logins, choose: choose });
+}
+
+// Content script: the generator's "Settings" link. Opens the settings page on
+// one of a fixed list of tabs.
+cipevent.onOpenSettings = function(callback, tab, section) {
+	var allowed = { "generator": true, "databases": true };
+	var hash = allowed[section] ? "#" + section : "";
+	browser.tabs.create({ url: browser.runtime.getURL("options/options.html") + hash });
+}
+
+// Toolbar popups: the login list of a tab (labels only, never passwords).
+// The popups cannot read the background page directly: in a private window
+// runtime.getBackgroundPage() returns null.
+cipevent.onGetLoginList = function(callback, tab) {
+	var t = page.tabs[tab.id] || {};
+	var list = t.loginList;
+	if(Array.isArray(list)) {
+		callback({ kind: "logins", labels: list.map(String), frameId: (typeof t.loginFrameId === "number") ? t.loginFrameId : 0 });
+	}
+	else if(list && Array.isArray(list.logins)) {
+		// Browser login dialog (HTTP authentication), see httpauth.js.
+		callback({ kind: "httpauth", url: String(list.url || ""), labels: list.logins.map(function(c) {
+			return String(c.Login) + " (" + String(c.Name) + ")";
+		}) });
+	}
+	else {
+		callback({ kind: "none", labels: [] });
+	}
+}
+
+// Toolbar popup of a browser login dialog: answer the dialog with the chosen
+// login. The password stays in the background.
+cipevent.onHttpAuthChoose = function(callback, tab, tabId, index) {
+	var t = page.tabs[tab.id];
+	var data = t && t.loginList;
+	var c = (data && Array.isArray(data.logins) && typeof index === "number") ? data.logins[index] : null;
+	if(c && typeof data.resolve === "function") {
+		var resolve = data.resolve;
+		data.resolve = null;
+		resolve({ authCredentials: { username: c.Login, password: c.Password } });
+		callback(true);
+		return;
+	}
+	callback(false);
 }
 
 cipevent.onCancelAssociate = function(callback, tab) {
@@ -383,8 +491,14 @@ cipevent.onMultipleFieldsPopup = function(callback, tab) {
 	browserAction.show(null, tab);
 }
 
-cipevent.pageClearLogins = function(callback, tab) {
-	page.clearLogins(tab.id);
+// A frame starts a new scan: its logins are gone. The toolbar login list is
+// cleared only if that frame filled it (another frame, e.g. a hidden iframe,
+// must not empty the list of the frame with the sign-in form).
+cipevent.pageClearLogins = function(callback, tab, frameId) {
+	var t = page.tabs[tab.id];
+	if(t && (typeof frameId !== "number" || t.loginFrameId === undefined || t.loginFrameId === frameId)) {
+		page.clearLogins(tab.id);
+	}
 	callback();
 }
 
@@ -403,8 +517,12 @@ cipevent.messageHandlers = {
 	'alert': cipevent.onShowAlert,
 	'associate': cipevent.onAssociate,
 	'cancel_associate': cipevent.onCancelAssociate,
+	'get_page_summary': cipevent.onGetPageSummary,
+	'get_login_list': cipevent.onGetLoginList,
+	'httpauth_choose': cipevent.onHttpAuthChoose,
 	'check_connection': cipevent.onCheckConnection,
 	'get_connected_database': cipevent.onGetConnectedDatabase,
+	'open_settings': cipevent.onOpenSettings,
 	'get_keepasshttp_versions': cipevent.onGetKeePassHttpVersions,
 	'get_status': cipevent.onGetStatus,
 	'get_tab_information': cipevent.onGetTabInformation,
@@ -424,8 +542,21 @@ cipevent.messageHandlers = {
 	'save_defined_credential_fields': cipevent.onSaveDefinedFields,
 	// Content scripts only (handled in onContentMessage); extension pages get null.
 	'get_secret': function(callback) { if(callback) { callback(null); } },
+	'remember_pick': function() {},
+	'take_pick': function(callback) { if(callback) { callback(null); } },
 	'set_remember_credentials': cipevent.onSetRememberPopup,
 	'stack_add': browserAction.stackAdd,
 	'generate_password': keepass.generatePassword,
 	'is_firefox': cipevent.isFirefox
+};
+
+// How long a login picked on the username step of a two-step sign-in is kept
+// for the password step (see remember_pick / take_pick).
+cipevent.PICK_TTL_MS = 5 * 60 * 1000;
+
+// Messages whose first argument is the tab they are about (see onMessage).
+cipevent.tabArgActions = {
+	'get_page_summary': true,
+	'get_login_list': true,
+	'httpauth_choose': true
 };

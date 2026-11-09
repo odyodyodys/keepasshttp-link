@@ -78,47 +78,10 @@ options.initTabs = function() {
 
 // ---------------------------------------------------------------- icons
 
-// Inline SVG icons (24 x 24, stroke = currentColor). Decorative: the text
-// next to them carries the meaning.
-options.ICONS = {
-	"x-circle": '<circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/>',
-	"lock": '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
-	"alert-circle": '<circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><path d="M12 16h.01"/>',
-	"hourglass": '<path d="M7 3h10M7 21h10M8 3v4l4 5-4 5v4M16 3v4l-4 5 4 5v4"/>',
-	"check-circle": '<circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/>',
-	"info": '<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/>',
-	"check": '<path d="M5 12l4 4 10-10"/>',
-	"x": '<path d="M6 6l12 12M18 6L6 18"/>',
-	"external": '<path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/>'
-};
-
-// The markup above is fixed text from this file, never data from storage or KeePass.
-options.icon = function(name, size, strokeWidth) {
-	var ns = "http://www.w3.org/2000/svg";
-	var svg = document.createElementNS(ns, "svg");
-	svg.setAttribute("viewBox", "0 0 24 24");
-	svg.setAttribute("width", size);
-	svg.setAttribute("height", size);
-	svg.setAttribute("fill", "none");
-	svg.setAttribute("stroke", "currentColor");
-	svg.setAttribute("stroke-width", strokeWidth || 2);
-	svg.setAttribute("stroke-linecap", "round");
-	svg.setAttribute("stroke-linejoin", "round");
-	svg.setAttribute("aria-hidden", "true");
-	svg.setAttribute("focusable", "false");
-	var parsed = new DOMParser().parseFromString('<svg xmlns="' + ns + '">' + options.ICONS[name] + "</svg>", "image/svg+xml");
-	Array.prototype.slice.call(parsed.documentElement.childNodes).forEach(function(n) {
-		svg.appendChild(document.importNode(n, true));
-	});
-	return svg;
-};
-
-options.setIcon = function(container, name, size, strokeWidth) {
-	container.textContent = "";
-	if(name) {
-		container.appendChild(options.icon(name, size, strokeWidth));
-	}
-};
+// Shared with the toolbar popup: ../ui-icons.js.
+options.ICONS = kphUi.ICONS;
+options.icon = kphUi.icon;
+options.setIcon = kphUi.setIcon;
 
 // ---------------------------------------------------------------- text helpers
 
@@ -622,10 +585,6 @@ options.applyStatus = function(s) {
 		return;
 	}
 	options.conn = s || { pluginAvailable: false };
-	var about = document.querySelector("#tab-about em.versionKPH");
-	if(about) {
-		about.textContent = (s && s.version) || "unknown";
-	}
 	options.render();
 };
 
@@ -1218,8 +1177,11 @@ options.renderSpecifiedCredentialFields = function() {
 		});
 };
 
+// The add-on version, next to the name in the header.
 options.initAbout = function() {
-	options.$("#tab-about em.versionCIP").textContent = browser.runtime.getManifest().version;
+	var version = browser.runtime.getManifest().version;
+	document.getElementById("ext-version").textContent = "v" + version;
+	document.getElementById("about-version").textContent = version;
 };
 
 // ---------------------------------------------------------------- start

@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Sign-up and one-time code</title><script src="/instrument.js"></script></head>
+<body>
+  <!-- Dummy sign-up form: new-password fields are never filled with an existing
+       login (they get the generator), and a one-time-code field (here even of
+       type password) is no login field at all: no generator icon, no fill. -->
+  <h1>Create an account (dummy)</h1>
+  <form id="f" action="/submitted" method="post">
+    <input type="email" id="email" name="email" autocomplete="email">
+    <input type="password" id="pw1" name="pw1" autocomplete="new-password">
+    <input type="password" id="pw2" name="pw2" autocomplete="new-password">
+    <input type="password" id="otp" name="otp" autocomplete="one-time-code" inputmode="numeric">
+    <button type="submit">Create</button>
+  </form>
+</body>
+</html>

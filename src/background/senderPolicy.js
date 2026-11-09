@@ -12,9 +12,15 @@ var senderPolicy = {};
 senderPolicy.contentActions = {
 	"alert": true,
 	"generate_password": true,
+	// Name of the database in use (header of the login list in the page).
+	"get_connected_database": true,
 	"get_secret": true,
 	"load_settings": true,
+	"open_settings": true,
 	"page_clear_logins": true,
+	// Two-step sign-in: the login picked on the username step (name only).
+	"remember_pick": true,
+	"take_pick": true,
 	"popup_login": true,
 	"retrieve_credentials": true,
 	"save_defined_credential_fields": true,
@@ -68,7 +74,9 @@ senderPolicy.topOriginOnlyActions = {
 	"get_secret": true,
 	"popup_login": true,
 	"retrieve_credentials": true,
-	"set_remember_credentials": true
+	"set_remember_credentials": true,
+	"remember_pick": true,
+	"take_pick": true
 };
 
 // Parsed http(s) URL of the sending frame, or null.

@@ -1,99 +1,6 @@
 /* Settings page. Loaded after ../ui.css (shared with the toolbar popups).
-   Colors: design tokens (input/design-settings/tokens.css), light by default,
+   Colors: design tokens in ../tokens.css (shared with the toolbar popup), light by default,
    dark through prefers-color-scheme. Sizes follow the design mockups. */
-
-:root {
-	/* surfaces */
-	--page: #f9f9fb;
-	--card: #ffffff;
-	--fill: #f0f0f4;
-	--border: #cfcfd8;
-	--border-strong: #8f8f9d;
-	--row-divider: #e4e4ea;
-
-	/* text */
-	--text: #15141a;
-	--text-2: #5b5b66;
-
-	/* the extension */
-	--accent: #1d4ed8;
-	--accent-hover: #1e40af;
-	--on-accent: #ffffff;
-	--module-bg: #1d4ed8;
-	--module-border: #1e40af;
-	--module-caption: #dbeafe;
-	--module-shadow: rgba(29, 78, 216, 0.25);
-	--chip-bg: #dbeafe;
-	--chip-text: #1e40af;
-
-	/* needs you */
-	--attention: #b45309;
-	--attention-bg: #fef3c7;
-	--attention-text: #78350f;
-
-	/* connected */
-	--ok: #15803d;
-	--ok-bg: #dcfce7;
-
-	/* one-time note */
-	--note-bg: #eff6ff;
-	--note-border: #bfdbfe;
-
-	/* input fill (dark: --page) */
-	--field: var(--card);
-
-	/* shape and type */
-	--radius-card: 12px;
-	--radius-control: 8px;
-	--radius-field: 6px;
-	--font: system-ui, -apple-system, 'Segoe UI', sans-serif;
-	--font-size: 14px;
-	--line-height: 20px;
-	--content-width: 800px;
-
-	/* names used by the shared ui.css rules (behaviour tabs, dialogs) */
-	--bg: var(--page);
-	--surface: var(--card);
-	--muted: var(--text-2);
-	--hover: var(--fill);
-	--success: var(--ok);
-}
-
-@media (prefers-color-scheme: dark) {
-	:root {
-		--page: #1c1b22;
-		--card: #2b2a33;
-		--fill: #35343d;
-		--border: #52525e;
-		--border-strong: #8f8f9d;
-		--row-divider: #3f3e48;
-
-		--text: #fbfbfe;
-		--text-2: #c0bfc9;
-
-		--accent: #60a5fa;
-		--accent-hover: #93c5fd;
-		--on-accent: #0c1a2e;
-		--module-bg: #1d4ed8;
-		--module-border: #60a5fa;
-		--module-caption: #dbeafe;
-		--module-shadow: rgba(96, 165, 250, 0.25);
-		--chip-bg: #26354f;
-		--chip-text: #93c5fd;
-
-		--attention: #fbbf24;
-		--attention-bg: #433a28;
-		--attention-text: #fde68a;
-
-		--ok: #4ade80;
-		--ok-bg: #2a4036;
-
-		--note-bg: #1e2a44;
-		--note-border: #2e4a7d;
-
-		--field: var(--page);
-	}
-}
 
 :root {
 	font: var(--font-size)/var(--line-height) var(--font);
@@ -140,11 +47,21 @@ body.options {
 			height: 36px;
 			flex-shrink: 0;
 		}
+		& .title-row {
+			display: flex;
+			align-items: baseline;
+			gap: 8px;
+		}
 		& h1 {
 			margin: 0;
 			font-size: 20px;
 			line-height: 24px;
 			font-weight: 600;
+		}
+		& .version {
+			font-size: 13px;
+			line-height: 16px;
+			color: var(--text-2);
 		}
 	}
 
@@ -837,6 +754,33 @@ body.options {
 	}
 
 	/* ---------- behaviour tabs (SPEC 7) ---------- */
+	/* Update KeePass: the intro that explains the save offer. */
+	& .save-intro {
+		& p, & ul {
+			margin: 0 0 8px;
+		}
+		& ul {
+			padding-left: 20px;
+		}
+		& li {
+			margin: 0 0 4px;
+		}
+		& strong {
+			color: var(--text);
+		}
+	}
+	/* Keyboard shortcuts: "Edit" at the right end, space before the next option. */
+	& .shortcut-actions {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 10px;
+		margin: 10px 0 16px;
+
+		& .muted {
+			margin-right: auto;
+		}
+	}
 	& .notice {
 		display: flex;
 		align-items: center;
@@ -872,11 +816,151 @@ body.options {
 		}
 	}
 
-	/* ---------- About: credits ---------- */
-	& .credits {
-		margin: 16px 0 0;
+	/* ---------- About tab (design: input/about-diagram) ---------- */
+	& #tab-about {
+		display: flex;
+		flex-direction: column;
+		gap: 20px;
+
+		&[hidden] { display: none; }
+	}
+	/* This project: one sentence, then the facts (label left, value right). */
+	& .about-project {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+	}
+	& .about-lead {
+		margin: 0;
+		font-size: 15px;
+		line-height: 22px;
+	}
+	& .about-facts {
+		display: grid;
+		grid-template-columns: max-content 1fr;
+		gap: 8px 24px;
+		margin: 0;
+		padding: 16px 20px;
+		background: var(--card);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-card);
+
+		& dt {
+			color: var(--text-2);
+		}
+		& dd {
+			margin: 0;
+		}
+	}
+	/* Credits, below the history diagram. */
+	& .about-credits {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+
+		& p {
+			margin: 0;
+			color: var(--text-2);
+		}
+	}
+	& .history {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	& .history-title {
+		margin: 0;
+		font-size: 14px;
+		line-height: 20px;
+		font-weight: 600;
+	}
+	& .history-card {
+		padding: 20px;
+		background: var(--card);
+		border: 1px solid var(--border);
+		border-radius: var(--radius-card);
+	}
+	& .history-map {
+		position: relative;
+		width: 758px;
+		height: 388px;
+
+		& > * {
+			position: absolute;
+			box-sizing: border-box;
+		}
+	}
+	& .h-lane {
+		left: 0;
+		width: 758px;
+		background: var(--page);
+		border: 1px solid var(--row-divider);
+		border-radius: 10px;
+	}
+	& .h-arrows {
+		left: 0;
+		top: 0;
+		overflow: visible;
+		fill: none;
+		stroke: var(--border-strong);
+		stroke-width: 2;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+
+		& .h-arrow-tip {
+			fill: var(--border-strong);
+			stroke: none;
+		}
+	}
+	& .h-node {
+		width: 200px;
+		height: 52px;
+		padding: 6px 10px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		text-align: center;
+		background: var(--fill);
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		color: var(--text-2);
+		font-size: 13px;
+		line-height: 17px;
+
+		& .h-sub {
+			font-size: 12px;
+			line-height: 16px;
+		}
+		&.now {
+			background: var(--note-bg);
+			border: 1.5px solid var(--accent);
+			color: var(--chip-text);
+		}
+		&.this {
+			background: var(--module-bg);
+			border: 2px solid var(--module-border);
+			box-shadow: 0 4px 12px var(--module-shadow);
+			color: #ffffff;
+
+			& .h-sub { color: var(--module-caption); }
+		}
+	}
+	& .h-col {
+		top: 0;
+		width: 200px;
+		text-align: center;
 		font-size: 12px;
 		line-height: 16px;
+		font-weight: 600;
+		color: var(--text);
+	}
+	& .h-lane-label {
+		left: 16px;
+		font-size: 11px;
+		line-height: 16px;
+		font-weight: 600;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
 		color: var(--text-2);
 	}
 }

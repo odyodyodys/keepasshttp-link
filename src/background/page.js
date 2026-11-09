@@ -115,9 +115,23 @@ page.clearCredentials = function(tabId, complete) {
 	}
 }
 
+// Empties the toolbar login list of a tab. Without logins the toolbar must not
+// open "Choose a login" with an empty list: its popup entry is removed and
+// the toolbar shows the status popup again.
 page.clearLogins = function(tabId) {
-	page.tabs[tabId].loginList = [];
-	delete page.tabs[tabId].loginFrameId;
+	var t = page.tabs[tabId];
+	if(!t) {
+		return;
+	}
+	t.loginList = [];
+	delete t.loginFrameId;
+	if(Array.isArray(t.stack)) {
+		var before = t.stack.length;
+		t.stack = t.stack.filter(function(d) { return !d || d.popup !== "popup_login.html"; });
+		if(t.stack.length !== before && typeof browserAction !== "undefined") {
+			browserAction.show(null, { "id": Number(tabId) });
+		}
+	}
 }
 
 // Drop every login the extension holds for pages: the background lists and
@@ -148,6 +162,8 @@ page.onTabUrlChanged = function(tabId, url) {
 		page.clearLogins(tabId);
 		t.knownLogins = {};
 		t.secrets = {};
+		// A login picked on a username step is only for the same site.
+		delete t.pick;
 		t.origin = origin;
 	}
 }

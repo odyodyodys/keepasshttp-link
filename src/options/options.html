@@ -5,14 +5,19 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<title>Settings | KeePassHttp-Link</title>
 		<link rel="stylesheet" href="../ui.css">
+		<link rel="stylesheet" href="../tokens.css">
 		<link rel="stylesheet" href="options.css">
+		<script src="../ui-icons.js" defer></script>
 		<script src="options.js" defer></script>
 	</head>
 	<body class="options">
 		<div class="container">
 			<header class="page-head">
 				<img src="/icons/icon.svg" width="36" height="36" alt="">
-				<h1>KeePassHttp-Link</h1>
+				<div class="title-row">
+					<h1>KeePassHttp-Link</h1>
+					<span class="version" id="ext-version"></span>
+				</div>
 			</header>
 
 			<!-- ============================ Status card ============================
@@ -236,10 +241,10 @@
 						<li><span class="shortcut-name">Fill username and password</span><span class="keys" data-command="fill-username-password"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd></span></li>
 						<li><span class="shortcut-name">Fill the password only</span><span class="keys" data-command="fill-password"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd></span></li>
 					</ul>
-					<p class="actions-left">
-						<button type="button" id="change-shortcuts" hidden>Change shortcuts</button>
+					<div class="shortcut-actions">
 						<span class="muted" id="shortcut-help">To change them: open <code>about:addons</code>, click the gear icon, then <em>Manage Extension Shortcuts</em>.</span>
-					</p>
+						<button type="button" id="change-shortcuts" aria-label="Edit keyboard shortcuts" hidden>Edit</button>
+					</div>
 
 					<div class="opt" data-setting="supressAlerts" data-type="bool" data-invert="1" data-default="false">
 						<div class="opt-head">
@@ -286,7 +291,7 @@
 							</ul>
 							<p>Security note: with this on, the extension watches every request for such windows. Keep it off if you do not use sites with this kind of login.</p>
 						</div>
-						<img class="example" src="/options/http-auth-dialog.png" alt="Example of a browser login dialog">
+						<img class="example" src="/options/http-auth-dialog.png" width="368" height="268" alt="Example of a browser login dialog: This site is asking you to sign in, with Username, Password, Sign in and Cancel">
 					</div>
 				</div>
 
@@ -344,10 +349,22 @@
 			<!-- ============================ Saving ============================ -->
 			<section class="tab" id="tab-saving" role="tabpanel" aria-labelledby="tabbtn-saving" hidden>
 				<div class="notice" data-notice hidden><span class="notice-icon"></span><div>These settings take effect once KeePass is connected.</div></div>
-				<p class="intro">
-					When you submit a login form with a username or password that KeePass does not have, the toolbar icon blinks and offers to save it.
-					Click the icon to create a new entry or update an existing one. The settings below control how long this offer stays open.
-				</p>
+				<div class="intro save-intro">
+					<p>
+						After you sign in on a page, the extension compares the username and password you used with what KeePass has for that page.
+						If KeePass already has exactly this login, nothing happens. If not, the toolbar icon blinks. Click it and choose:
+					</p>
+					<ul>
+						<li><strong>New</strong>: create a new entry in KeePass with this username, password and page address. For an account that KeePass does not have yet.</li>
+						<li><strong>Update</strong>: put this username and password into an entry KeePass already has for the page, for example after you changed your password. With several entries you pick one, the one with the same username is shown in bold. Not available when KeePass has no entry for the page.</li>
+						<li><strong>Dismiss</strong>: save nothing.</li>
+					</ul>
+					<p>
+						New entries go to the group "KeePassHttp Passwords". To update entries, turn on "Always allow updating entries" in the KeePassHttp plugin options in KeePass (Advanced tab).
+						The offer only appears for sign-in pages that send a normal form. Some, for example Google's, do not, and show no offer.
+					</p>
+					<p>The settings below control how long the offer stays open.</p>
+				</div>
 
 				<div class="opt" data-setting="blinkTimeout" data-type="seconds" data-default="7500" data-min="0" data-max="600000">
 					<div class="opt-head">
@@ -454,27 +471,76 @@
 
 			<!-- ============================ About ============================ -->
 			<section class="tab" id="tab-about" role="tabpanel" aria-labelledby="tabbtn-about" hidden>
-				<p>
-					KeePassHttp-Link is a modified version of
-					<a target="_blank" rel="noopener noreferrer" href="https://github.com/smorks/keepasshttp-connector">KeePassHttp-Connector</a>
-					by Andy Brandt (smorks), based on chromeIPass and PassIFox by Perry Nguyen and Lukas Schulze,
-					with WebExtension work by Angus Gratton. License: GNU GPL v3.
-				</p>
-				<p>
-					<a target="_blank" rel="noopener noreferrer" href="https://github.com/odyodyodys/keepasshttp-link">Project page on GitHub</a>
-				</p>
-				<p>
-					It needs the KeePassHttp plugin in KeePass, tested with version 2.3.1.0 from
-					<a target="_blank" rel="noopener noreferrer" href="https://github.com/alan-null/keepasshttp">github.com/alan-null/keepasshttp</a>.
-				</p>
-				<hr>
-				<dl class="versions">
-					<dt>KeePassHttp-Link version:</dt>
-					<dd><em class="versionCIP"></em></dd>
-					<dt>KeePassHttp plugin version:</dt>
-					<dd><em class="versionKPH"></em></dd>
-				</dl>
-				<p class="credits">Based on work by Perry Nguyen, Lukas Schulze, Angus Gratton and Andy Brandt.</p>
+				<!-- This project today: what it does and the facts about it. -->
+				<div class="about-project">
+					<p class="about-lead">
+						KeePassHttp-Link fills your KeePass logins in Firefox and saves new ones, through the KeePassHttp plugin on your own computer.
+					</p>
+					<dl class="about-facts">
+						<dt>Version</dt>
+						<dd id="about-version"></dd>
+						<dt>Works with</dt>
+						<dd>
+							Firefox 140 or newer, KeePass 2.x and the
+							<a target="_blank" rel="noopener noreferrer" href="https://github.com/alan-null/keepasshttp">KeePassHttp plugin</a>
+							2.3 or newer (tested with 2.3.1.0)
+						</dd>
+						<dt>Privacy</dt>
+						<dd>Talks only to KeePass on this computer, encrypted with AES-256 and checked with HMAC. Collects no data.</dd>
+						<dt>License</dt>
+						<dd>GNU GPL v3, free and open source</dd>
+						<dt>Project page</dt>
+						<dd><a target="_blank" rel="noopener noreferrer" href="https://github.com/odyodyodys/keepasshttp-link">github.com/odyodyodys/keepasshttp-link</a></dd>
+						<dt>Help and ideas</dt>
+						<dd><a target="_blank" rel="noopener noreferrer" href="https://github.com/odyodyodys/keepasshttp-link/issues">Report a problem or suggest a feature</a></dd>
+					</dl>
+				</div>
+
+				<!-- History: static diagram (design: input/about-diagram). Screen
+				     readers get the summary in aria-label instead of the boxes. -->
+				<div class="history">
+					<h2 class="history-title">History</h2>
+					<div class="history-card">
+						<div class="history-map" role="img" aria-label="History: chromeIPass and PassIFox by Perry Nguyen and Lukas Schulze led to chromeIPass by alan-null (Chromium only), to KeePassXC-Browser by the KeePassXC team, and to KeePassHttp-Connector by smorks (archived 2018), which led to KeePassHttp-Link, this project. The KeePass plugin KeePassHttp by Perry Nguyen continues as the alan-null fork.">
+							<div class="h-lane" style="top: 28px; height: 240px"></div>
+							<div class="h-lane" style="top: 284px; height: 104px"></div>
+							<svg class="h-arrows" width="758" height="388" viewBox="0 0 758 388" aria-hidden="true" focusable="false">
+								<defs>
+									<marker id="h-arrow-head" orient="auto" markerWidth="5" markerHeight="5" refX="2" refY="2" overflow="visible"><path class="h-arrow-tip" d="M0 0 L4 2 L0 4 Z"/></marker>
+								</defs>
+								<path d="M216 158 L537 158" marker-end="url(#h-arrow-head)"/>
+								<path d="M248 90 L248 226"/>
+								<path d="M248 90 L537 90" marker-end="url(#h-arrow-head)"/>
+								<path d="M248 226 L274 226" marker-end="url(#h-arrow-head)"/>
+								<path d="M479 226 L537 226" marker-end="url(#h-arrow-head)"/>
+								<path d="M216 346 L537 346" marker-end="url(#h-arrow-head)"/>
+							</svg>
+							<div class="h-node" style="left: 16px; top: 132px"><span><b>chromeIPass + PassIFox</b><br><span class="h-sub">Perry Nguyen, Lukas Schulze</span></span></div>
+							<div class="h-node" style="left: 279px; top: 200px"><span><b>KeePassHttp-Connector</b><br><span class="h-sub">smorks · archived 2018</span></span></div>
+							<div class="h-node now" style="left: 542px; top: 64px"><span><b>chromeIPass</b><br><span class="h-sub">alan-null · Chromium only</span></span></div>
+							<div class="h-node now" style="left: 542px; top: 132px"><span><b>KeePassXC-Browser</b><br><span class="h-sub">KeePassXC team</span></span></div>
+							<div class="h-node this" style="left: 542px; top: 200px"><span><b>KeePassHttp-Link</b><br><span class="h-sub">this project</span></span></div>
+							<div class="h-node" style="left: 16px; top: 320px"><span><b>KeePassHttp</b><br><span class="h-sub">Perry Nguyen</span></span></div>
+							<div class="h-node now" style="left: 542px; top: 320px"><span><b>KeePassHttp</b><br><span class="h-sub">alan-null fork</span></span></div>
+							<div class="h-col" style="left: 16px">Where it started</div>
+							<div class="h-col" style="left: 279px">WebExtension port</div>
+							<div class="h-col" style="left: 542px">Where it is now</div>
+							<div class="h-lane-label" style="top: 38px">Browser extension</div>
+							<div class="h-lane-label" style="top: 294px">KeePass plugin</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Credits: whose work this project builds on. -->
+				<div class="about-credits">
+					<h2 class="history-title">Credits</h2>
+					<p>
+						KeePassHttp-Link is a modified version of
+						<a target="_blank" rel="noopener noreferrer" href="https://github.com/smorks/keepasshttp-connector">KeePassHttp-Connector</a>
+						by Andy Brandt (smorks), based on chromeIPass and PassIFox by Perry Nguyen and Lukas Schulze,
+						with WebExtension work by Angus Gratton.
+					</p>
+				</div>
 			</section>
 		</div>
 

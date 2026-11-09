@@ -1,0 +1,335 @@
+/* Toolbar popup (status). Colors from ../tokens.css, sizes from the design
+   boards "Toolbar popup" (360 px wide). Loaded after ../ui.css. */
+
+:root {
+	font: 13px/18px var(--font);
+	background: var(--card);
+}
+
+body.popup-status {
+	box-sizing: border-box;
+	width: 360px;
+	margin: 0;
+	padding: 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	background: var(--card);
+	color: var(--text);
+
+	& a {
+		color: var(--accent);
+
+		&:hover { color: var(--accent-hover); }
+	}
+	& :is(button, a):focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 2px;
+	}
+
+	/* ---------- header ---------- */
+	& .p-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+	}
+	& .p-brand {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		font-weight: 600;
+
+		& img { width: 20px; height: 20px; flex-shrink: 0; }
+	}
+	& button.p-icon-btn {
+		width: 28px;
+		height: 28px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0;
+		background: none;
+		border: none;
+		border-radius: 6px;
+		color: var(--text-2);
+		cursor: pointer;
+
+		&:hover { background: var(--fill); }
+	}
+
+	/* ---------- state ---------- */
+	& .p-body {
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+
+		&[hidden] { display: none; }
+	}
+	& .p-sentence {
+		display: flex;
+		align-items: flex-start;
+		gap: 10px;
+
+		&.single { align-items: center; }
+	}
+	& .p-state-icon {
+		display: inline-flex;
+		flex-shrink: 0;
+
+		&.attention { color: var(--attention); }
+		&.ok { color: var(--ok); }
+	}
+	& .p-sentence-text {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	& .p-headline {
+		font-size: 15px;
+		line-height: 20px;
+		font-weight: 600;
+	}
+	& .p-sub {
+		color: var(--text-2);
+	}
+	& .chip {
+		display: inline-block;
+		background: var(--chip-bg);
+		color: var(--chip-text);
+		font-weight: 600;
+		overflow-wrap: anywhere;
+	}
+	& .chip-headline {
+		padding: 0 7px;
+		border-radius: 6px;
+		line-height: 20px;
+	}
+	& .chip-text {
+		padding: 0 5px;
+		border-radius: 5px;
+		line-height: 17px;
+	}
+
+	/* ---------- boxes ---------- */
+	& .p-box {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding: 12px;
+		background: var(--fill);
+		border-radius: 10px;
+
+		&[hidden] { display: none; }
+	}
+	& .p-box-title {
+		font-size: 12px;
+		line-height: 16px;
+		font-weight: 600;
+		color: var(--text-2);
+	}
+	& .p-step {
+		display: flex;
+		align-items: flex-start;
+		gap: 10px;
+
+		&.done .p-step-text { color: var(--text-2); }
+	}
+	& .p-tick {
+		box-sizing: border-box;
+		width: 14px;
+		height: 14px;
+		margin-top: 2px;
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border: 1.5px solid var(--border-strong);
+		border-radius: 4px;
+		background: var(--card);
+
+		&.on {
+			border: none;
+			background: var(--ok);
+			color: #ffffff;
+		}
+	}
+	& .p-hint {
+		font-size: 12px;
+		line-height: 16px;
+		color: var(--text-2);
+
+		&[hidden] { display: none; }
+	}
+	& .p-site {
+		gap: 10px;
+	}
+	& .p-none {
+		gap: 6px;
+	}
+	& .p-none-title {
+		font-weight: 600;
+	}
+
+	/* ---------- Choose a login (popup_login.html) ---------- */
+	& .p-choose-head {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 8px;
+
+		& .p-choose-title { font-weight: 600; }
+		& .p-choose-count {
+			flex-shrink: 0;
+			font-size: 12px;
+			line-height: 16px;
+			color: var(--text-2);
+		}
+	}
+	& .p-filter {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		height: 32px;
+		padding: 0 10px;
+		box-sizing: border-box;
+		background: var(--card);
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		color: var(--text-2);
+
+		&[hidden] { display: none; }
+		&:focus-within {
+			outline: 2px solid var(--accent);
+			outline-offset: 2px;
+		}
+		& input {
+			flex: 1 1 auto;
+			min-width: 0;
+			padding: 0;
+			background: none;
+			border: none;
+			font: inherit;
+			color: var(--text);
+			outline: none;
+		}
+	}
+	& .p-list {
+		display: flex;
+		flex-direction: column;
+		max-height: 216px; /* 6 rows */
+		overflow-y: auto;
+		background: var(--card);
+		border: 1px solid var(--border);
+		border-radius: 8px;
+	}
+	& button.p-option {
+		width: 100%;
+		min-height: 36px;
+		flex-shrink: 0;
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 0 12px;
+		box-sizing: border-box;
+		background: none;
+		border: none;
+		border-bottom: 1px solid var(--row-divider);
+		border-radius: 0;
+		font: inherit;
+		color: var(--text);
+		text-align: left;
+		cursor: pointer;
+
+		&:last-child { border-bottom: none; }
+		&:hover { background: none; }
+		&[aria-selected=true] { background: var(--note-bg); }
+		&:focus-visible { outline-offset: -2px; }
+		& .p-key { display: inline-flex; flex-shrink: 0; color: var(--border-strong); }
+		&[aria-selected=true] .p-key { color: var(--accent); }
+		& .p-label {
+			flex: 1 1 auto;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+		& .p-fill {
+			flex-shrink: 0;
+			font-size: 12px;
+			line-height: 16px;
+			font-weight: 600;
+			color: var(--accent);
+			visibility: hidden;
+		}
+		&[aria-selected=true] .p-fill { visibility: visible; }
+	}
+	& .p-keys-hint {
+		font-size: 11px;
+		line-height: 16px;
+		color: var(--text-2);
+	}
+	& .p-site-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+	}
+	& .p-site-name {
+		font-weight: 600;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	& .p-site-count {
+		flex-shrink: 0;
+		color: var(--text-2);
+	}
+	& .p-site-actions {
+		display: flex;
+		gap: 8px;
+
+		& button { flex: 1 1 0; }
+	}
+
+	/* ---------- buttons ---------- */
+	& button.p-primary,
+	& button.p-secondary {
+		font: inherit;
+		font-weight: 600;
+		border-radius: 8px;
+		cursor: pointer;
+		filter: none;
+
+		&[hidden] { display: none; }
+	}
+	& button.p-primary {
+		padding: 8px 14px;
+		background: var(--accent);
+		color: var(--on-accent);
+		border: none;
+
+		&:hover:not(:disabled) { background: var(--accent-hover); }
+	}
+	& button.p-secondary {
+		padding: 6px 12px;
+		background: var(--card);
+		color: var(--text);
+		border: 1px solid var(--border);
+
+		&:hover:not(:disabled) { background: var(--fill); }
+	}
+	& button.p-wide {
+		width: 100%;
+	}
+	& .p-steps button.p-wide {
+		margin-top: 2px;
+	}
+	& button.p-cancel {
+		align-self: flex-start;
+		padding: 7px 14px;
+	}
+	& button:disabled {
+		opacity: 0.6;
+		cursor: default;
+	}
+}

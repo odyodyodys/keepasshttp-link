@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Two-step sign-in</title><script src="/instrument.js"></script></head>
+<body>
+  <!-- Built after the structure of a two-step sign-in (Google style, dummy data):
+       no <form>; step 1 a username field (autocomplete "username webauthn") and
+       a hidden password field for password managers; "Next" replaces the step
+       without a page load; step 2 a hidden email field with the account and the
+       password field (autocomplete "current-password webauthn", no id). -->
+  <h1>Two-step sign-in (dummy)</h1>
+  <div id="app">
+    <div id="step1">
+      <input type="text" id="identifierId" name="identifier" autocomplete="username webauthn" aria-label="Email or phone">
+      <input type="password" name="hiddenPassword" tabindex="-1" aria-hidden="true" style="display:none">
+      <button type="button" id="next">Next</button>
+    </div>
+  </div>
+  <script>
+    document.getElementById('next').addEventListener('click', () => {
+      const typed = document.getElementById('identifierId').value.trim();
+      const account = typed || 'user-b@example.test';
+      setTimeout(() => {
+        const app = document.getElementById('app');
+        app.textContent = '';
+        const hidden = document.createElement('input');
+        hidden.type = 'email';
+        hidden.name = 'identifier';
+        hidden.id = 'hiddenEmail';
+        hidden.tabIndex = -1;
+        hidden.setAttribute('aria-hidden', 'true');
+        hidden.setAttribute('autocomplete', 'off');
+        hidden.style.display = 'none';
+        hidden.value = account;
+        const pw = document.createElement('input');
+        pw.type = 'password';
+        pw.name = 'Passwd';
+        pw.setAttribute('autocomplete', 'current-password webauthn');
+        pw.setAttribute('aria-label', 'Enter your password');
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.id = 'signin';
+        btn.textContent = 'Next';
+        app.append(hidden, pw, btn);
+      }, 400);
+    });
+  </script>
+</body>
+</html>

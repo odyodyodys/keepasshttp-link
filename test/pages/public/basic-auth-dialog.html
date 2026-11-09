@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Browser login dialog (manual test)</title>
+  <style>
+    body { font: 15px/1.5 system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; }
+    a.button { display: inline-block; padding: 8px 14px; border-radius: 8px; background: #1d4ed8; color: #fff; text-decoration: none; font-weight: 600; }
+    code { background: #f0f0f4; padding: 1px 4px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <!-- Manual test page (dummy data): shows Firefox's own login dialog (HTTP
+       authentication). A page cannot open that dialog by itself: the server must
+       answer "401 Unauthorized" with "WWW-Authenticate: Basic". The test pages
+       server does that on /basic (test/pages/server.js). -->
+  <h1>Browser login dialog</h1>
+  <p>Opens Firefox's own login dialog (HTTP authentication), for example to take a screenshot.</p>
+  <p><a class="button" href="/basic">Open the login dialog</a></p>
+  <p>Dummy login if you want to sign in: <code>basic-user</code> / <code>Dummy-Basic-Pass</code>.</p>
+  <p>To see Firefox's dialog unchanged, turn off <em>Answer the browser's own login dialog with KeePass</em>
+    in the KeePassHttp-Link settings (Read from KeePass tab). With it on, the extension may answer the dialog for you.</p>
+  <p>Firefox shows the dialog again on the next visit only after it forgets the login: open the page in a new
+    private window, or clear the site data for <code>localhost</code>.</p>
+</body>
+</html>

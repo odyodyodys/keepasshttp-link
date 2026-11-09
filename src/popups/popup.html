@@ -4,63 +4,68 @@
 		<meta charset="utf-8">
 		<title>KeePassHttp-Link</title>
 		<link rel="stylesheet" href="../ui.css">
-		<script src="popup_functions.js" defer></script>
+		<link rel="stylesheet" href="../tokens.css">
+		<link rel="stylesheet" href="popup.css">
+		<script src="../ui-icons.js" defer></script>
 		<script src="popup.js" defer></script>
 	</head>
-	<body class="popup">
-		<div id="settings" class="settings">
-			<button id="btn-options" type="button" class="small">Settings</button>
-			<button id="btn-choose-credential-fields" type="button" class="small">Choose own credential fields for this page</button>
-		</div>
-
-		<div id="initial-state">
-			<p><img style="margin-right: 1em; vertical-align: middle" src="throbber.gif" alt=""> Checking status...</p>
-		</div>
-
-		<div id="not-configured" hidden>
-			<p>
-				KeePassHttp-Link has not been configured.
-				Press the connect button to register and pair with KeePassHttp.
-			</p>
-			<div class="actions">
-				<button id="connect-button" type="button" class="primary">Connect</button>
+	<!-- Toolbar popup on pages without logins to choose (pages with logins
+	     open popup_login.html). One state at a time, as on the settings page:
+	     A, A2, B, B-wait, B2, B3, C. Filled by popup.js. -->
+	<body class="popup-status">
+		<header class="p-head">
+			<div class="p-brand">
+				<img src="/icons/icon.svg" width="20" height="20" alt="">
+				<span>KeePassHttp-Link</span>
 			</div>
-		</div>
+			<button type="button" class="p-icon-btn" id="p-settings" aria-label="Settings" title="Settings"></button>
+		</header>
 
-		<div id="need-reconfigure" hidden>
-			<p>KeePassHttp-Link has been disconnected from KeePassHttp.</p>
-			<code id="need-reconfigure-message"></code>
-			<p>Press the reconnect button to establish a new connection.</p>
-			<div class="actions">
-				<button id="reconnect-button" type="button" class="primary">Reconnect</button>
+		<div class="p-body" id="p-body" aria-live="polite" hidden>
+			<div class="p-sentence">
+				<span class="p-state-icon" id="p-state-icon"></span>
+				<div class="p-sentence-text">
+					<div class="p-headline" id="p-headline"></div>
+					<div class="p-sub" id="p-sub" hidden></div>
+				</div>
 			</div>
-		</div>
 
-		<div id="configured-not-associated" hidden>
-			<p>
-				KeePassHttp-Link has been configured using the identifier
-				<em id="unassociated-identifier"></em> and has not yet
-				connected to KeePassHttp.
-			</p>
-		</div>
-
-		<div id="configured-and-associated" hidden>
-			<p>
-				KeePassHttp-Link has been configured using the identifier
-				"<em id="associated-identifier"></em>" and is successfully
-				connected to KeePassHttp.
-			</p>
-			<div class="actions">
-				<button id="redetect-fields-button" type="button">Redetect credential fields</button>
+			<!-- First run: the three steps (A and B). -->
+			<div class="p-box p-steps" id="p-steps" hidden>
+				<div class="p-box-title">To get started</div>
+				<div class="p-step" data-row="1"><span class="p-tick"></span><div class="p-step-text"></div></div>
+				<div class="p-step" data-row="2"><span class="p-tick"></span><div class="p-step-text">Start KeePass and open your database.</div></div>
+				<div class="p-step" data-row="3"><span class="p-tick"></span><div class="p-step-text"></div></div>
+				<button type="button" class="p-primary p-wide" id="p-steps-action" hidden>Give Firefox access</button>
+				<div class="p-hint" id="p-steps-hint" hidden>KeePass will ask for a Key Name. Type the database's name, for example Work.</div>
 			</div>
-		</div>
 
-		<div id="error-encountered" hidden>
-			<p>KeePassHttp-Link has encountered an error:</p>
-			<p style="margin-left: 1em"><code id="error-message"></code></p>
-			<div class="actions">
-				<button id="reload-status-button" type="button">Reload</button>
+			<!-- Connected: the current site. -->
+			<div class="p-box p-site" id="p-site" hidden>
+				<div class="p-site-row">
+					<div class="p-site-name" id="p-site-name"></div>
+					<div class="p-site-count" id="p-site-count"></div>
+				</div>
+				<div class="p-site-actions">
+					<button type="button" class="p-secondary" id="p-redetect">Redetect fields</button>
+					<button type="button" class="p-secondary" id="p-choose">Choose fields</button>
+				</div>
 			</div>
+
+			<!-- Connected, but KeePass has no login for this site. -->
+			<div class="p-box p-none" id="p-none" hidden>
+				<div class="p-none-title" id="p-none-title"></div>
+				<div class="p-sub" id="p-none-save"></div>
+				<div class="p-sub" id="p-none-url"></div>
+				<!-- Only when no sign-in form was found (KeePass not asked). -->
+				<div class="p-site-actions" id="p-none-actions" hidden>
+					<button type="button" class="p-secondary" id="p-none-redetect">Redetect fields</button>
+					<button type="button" class="p-secondary" id="p-none-choose">Choose fields</button>
+				</div>
+			</div>
+
+			<button type="button" class="p-primary p-wide" id="p-action" hidden></button>
+			<button type="button" class="p-secondary p-cancel" id="p-cancel" hidden>Cancel</button>
 		</div>
 	</body>
 </html>
