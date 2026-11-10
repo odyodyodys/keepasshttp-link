@@ -1,0 +1,37 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Login with a hidden password copy</title><script src="/instrument.js"></script>
+<style>
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+    clip-path: inset(50%); white-space: nowrap; border: 0; }
+  .field { margin: 4px 0; }
+</style>
+</head>
+<body>
+  <!-- Built after the structure of a router login (dummy data): a hidden 1×1
+       "sr-only" password field (aria-hidden, no name) comes before the real
+       one, in the same wrapper. The username is 3 levels below the element
+       that holds both password fields. The extension must fill the real one. -->
+  <h1>Router login (dummy)</h1>
+  <form id="f" action="/submitted" method="post">
+    <div class="list-layout">
+      <div class="field" id="user-root">
+        <div class="field-input">
+          <input type="text" name="username" id="username" autocomplete="">
+        </div>
+      </div>
+      <div class="field" id="pass-root">
+        <div class="field-input">
+          <input type="password" id="decoy" class="sr-only" tabindex="-1" aria-hidden="true">
+          <div class="field-wrap">
+            <input type="password" name="password" id="password" autocomplete="">
+            <button type="button" class="field__addon">show</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <button type="submit">Sign in</button>
+  </form>
+  <input type="text" id="other" name="other" placeholder="unrelated field">
+</body>
+</html>

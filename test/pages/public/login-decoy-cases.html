@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Hidden password copies: more cases</title><script src="/instrument.js"></script>
+<style>
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+    clip-path: inset(50%); white-space: nowrap; border: 0; }
+</style>
+</head>
+<body>
+  <!-- Dummy data. One case per page load, chosen with ?case=:
+       after   - the hidden 1×1 copy comes after the real password field
+       pwonly  - password only (no username), hidden copy before the real one
+       late    - the form (hidden copy before the real one) is added after load
+       far     - form A has a username and only a hidden copy; form B, after it,
+                 has a visible password field. Form B must never be used for A. -->
+  <h1>Hidden password copies (dummy)</h1>
+  <div id="app"></div>
+  <script>
+    const decoy = '<input type="password" id="decoy" class="sr-only" tabindex="-1" aria-hidden="true">';
+    const user = '<div><input type="text" name="username" id="username"></div>';
+    const real = '<div><input type="password" name="password" id="password"></div>';
+    const cases = {
+      after: '<form action="/submitted" method="post">' + user + '<div>' + real + decoy + '</div><button type="submit">Sign in</button></form>',
+      pwonly: '<form action="/submitted" method="post"><div>' + decoy + real + '</div><button type="submit">Sign in</button></form>',
+      late: '<form action="/submitted" method="post">' + user + '<div>' + decoy + real + '</div><button type="submit">Sign in</button></form>',
+      far: '<form id="a" action="/submitted" method="post">' + user + '<div>' + decoy + '</div><button type="submit">Sign in</button></form>' +
+        '<form id="b" action="/other" method="post"><div><input type="password" name="other-password" id="otherpw"></div></form>',
+    };
+    const c = new URLSearchParams(location.search).get('case');
+    const app = document.getElementById('app');
+    if (c === 'late') {
+      setTimeout(() => { app.innerHTML = cases.late; }, 600);
+    } else {
+      app.innerHTML = cases[c] || '';
+    }
+  </script>
+</body>
+</html>

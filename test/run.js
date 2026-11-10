@@ -1538,6 +1538,99 @@ scenarios.steppick = async function (driver) {
   return out;
 };
 
+// Issue #41: a hidden 1×1 "sr-only" copy of the password field (aria-hidden,
+// router login style) comes before the real one. The real field is filled,
+// the copy never; one login is offered; no generator icon on the copy; the
+// save offer reads the real field.
+const decoyFields = (driver) => driver.executeScript(function () {
+  const v = (id) => { const e = document.getElementById(id); return e ? e.value : null; };
+  return { username: v('username'), password: v('password'), decoy: v('decoy'), otherpw: v('otherpw'),
+    icons: document.querySelectorAll('kphc-key').length };
+});
+scenarios.decoy = async function (driver) {
+  const url = PAGES_TLS.replace('{host}', 'single') + '/login-decoy.html';
+  const out = {};
+
+  // "Fill without asking": filled on load.
+  await configure(driver, { autoFillSingleEntry: true });
+  await kphReset();
+  await openPage(driver, url, 3500);
+  out.auto = await decoyFields(driver);
+  out.autoRequests = (await kphStats())?.byType['get-logins'] ?? 0;
+
+  // Pick from the list on the username field.
+  await configure(driver, { autoFillSingleEntry: false });
+  await openPage(driver, url, 3500);
+  out.beforePick = await decoyFields(driver);
+  out.items = (await openDropdown(driver, 'username')).items;
+  await clickDropdownItem(driver, 0);
+  await sleep(800);
+  out.picked = await decoyFields(driver);
+
+  // No list on the password field: the real field is paired with the username,
+  // not left alone in a second pair (which would get its own list).
+  await openPage(driver, url, 3500);
+  out.itemsOnPassword = (await openDropdown(driver, 'password')).items;
+  await driver.findElement(By.id('password')).sendKeys(Key.ESCAPE);
+
+  // Save offer: the unchanged KeePass login gives no offer, a typed new login does.
+  const submit = async (typed) => {
+    await openPage(driver, url, 3500);
+    if (typed) {
+      await driver.findElement(By.id('username')).sendKeys('new-user');
+      await driver.findElement(By.id('password')).sendKeys('New-Dummy-Pass-9');
+    } else {
+      await openDropdown(driver, 'username');
+      await clickDropdownItem(driver, 0);
+      await sleep(800);
+    }
+    await driver.findElement(By.css('button[type=submit]')).click();
+    await sleep(1500);
+    return toolbarPopup(driver);
+  };
+  out.popupAfterUnchanged = await submit(false);
+  out.popupAfterNew = await submit(true);
+
+  const filled = (s) => s.username === 'user-one' && s.password === 'Dummy-Pass-1' && s.decoy === '';
+  out.pass = out.autoRequests === 1 && filled(out.auto) && out.auto.icons === 1 &&
+    out.beforePick.password === '' && out.beforePick.decoy === '' &&
+    out.items.length === 1 && filled(out.picked) && out.itemsOnPassword.length === 0 &&
+    out.popupAfterUnchanged !== 'popup_remember.html' && out.popupAfterNew === 'popup_remember.html';
+  return out;
+};
+
+// Issue #41, more cases ("fill without asking" on): hidden copy after the real
+// field, password-only form, form added after load, and a form whose only
+// password field is a hidden copy (a visible password field of another form
+// is never used for it).
+scenarios.decoycases = async function (driver) {
+  const base = PAGES_TLS.replace('{host}', 'single') + '/login-decoy-cases.html?case=';
+  await configure(driver, { autoFillSingleEntry: true });
+  const out = {};
+  for (const c of ['after', 'pwonly', 'late', 'far']) {
+    await kphReset();
+    await openPage(driver, base + c, 4000);
+    await sleep(c === 'late' ? 1500 : 300);
+    out[c] = await decoyFields(driver);
+    out[c].requests = (await kphStats())?.byType['get-logins'] ?? 0;
+    if (c === 'after') {
+      await configure(driver, { autoFillSingleEntry: false });
+      await openPage(driver, base + c, 4000);
+      out.afterItems = (await openDropdown(driver, 'username')).items;
+      await driver.findElement(By.id('username')).sendKeys(Key.ESCAPE);
+      await configure(driver, { autoFillSingleEntry: true });
+    }
+  }
+  await configure(driver, { autoFillSingleEntry: false });
+
+  const real = (s) => s.password === 'Dummy-Pass-1' && s.decoy === '' && s.icons === 1;
+  out.pass = real(out.after) && out.after.username === 'user-one' && out.afterItems.length === 1 &&
+    real(out.pwonly) && out.pwonly.username === null &&
+    real(out.late) && out.late.username === 'user-one' &&
+    out.far.otherpw === '';
+  return out;
+};
+
 // Sign-up page (dummy): new-password fields get the generator but no request
 // to KeePass and no fill; the one-time-code field (type password here) gets
 // neither.

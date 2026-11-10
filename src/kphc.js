@@ -726,7 +726,8 @@ cipPassword.init = function() {
 }
 
 cipPassword.initField = function(field, inputs, pos) {
-	if(!field) {
+	// No icon on hidden copies of a password field (1×1, aria-hidden).
+	if(!field || !cipFields.isShown(field)) {
 		return;
 	}
 	if(kphcData(field, "cip-password-generator")) {
@@ -741,7 +742,7 @@ cipPassword.initField = function(field, inputs, pos) {
 	var next = null;
 	if(inputs) {
 		for(var i = pos + 1; i < inputs.length; i++) {
-			if(inputs[i] && cipFields.isPasswordInput(inputs[i])) {
+			if(inputs[i] && cipFields.isPasswordInput(inputs[i]) && cipFields.isShown(inputs[i])) {
 				next = inputs[i];
 				break;
 			}
@@ -1600,6 +1601,59 @@ cipFields.isPasswordInput = function(field) {
 	return !!t && t.toLowerCase() == "password";
 }
 
+// A field the user can see and type in: larger than 1×1 px and not marked
+// aria-hidden itself. Hidden "sr-only" copies of a password field (1×1,
+// clipped, aria-hidden), as on some router logins, fail this test; they still
+// pass kphcVisible() because they have a layout box.
+cipFields.isShown = function(field) {
+	return kphcVisible(field) && field.offsetWidth > 1 && field.offsetHeight > 1 &&
+		field.getAttribute("aria-hidden") !== "true";
+}
+
+// How far up the page structure the search for a better password field goes.
+cipFields.PASSWORD_SEARCH_LEVELS = 4;
+
+// The password field to use with a username field: the given password field
+// if the user can see it. Otherwise go up from the username field (or from
+// the password field if there is no username) one level at a time, at most
+// PASSWORD_SEARCH_LEVELS levels and never past the <form>, until an element
+// holds a password field. In there, take the first one the user can see (after
+// the username field). If there is none, keep the given field. Fields without
+// a layout box (0×0, display:none) are never taken.
+cipFields.preferShownPassword = function(usernameField, passwordField) {
+	if(!passwordField || cipFields.isShown(passwordField)) {
+		return passwordField;
+	}
+	var start = usernameField || passwordField;
+	var node = start;
+	for(var level = 0; level < cipFields.PASSWORD_SEARCH_LEVELS; level++) {
+		if(node.tagName === "FORM" || !node.parentElement) {
+			break;
+		}
+		node = node.parentElement;
+		var found = false;
+		var list = node.querySelectorAll("input");
+		for(var i = 0; i < list.length; i++) {
+			var el = list[i];
+			if(el === start || !cipFields.isPasswordInput(el) || !kphcVisible(el) ||
+					cipFields.kind(el) === "one-time-code") {
+				continue;
+			}
+			if(usernameField && !(usernameField.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)) {
+				continue;
+			}
+			found = true;
+			if(cipFields.isShown(el)) {
+				return el;
+			}
+		}
+		if(found) {
+			break;
+		}
+	}
+	return passwordField;
+}
+
 cipFields.prepareId = function(id) {
 	return id.replace(/[:#.,\[\]\(\)' "]/g, function(m) {
 												return "\\"+m
@@ -1673,21 +1727,32 @@ cipFields.prepareVisibleFieldsWithID = function(pattern) {
 cipFields.getAllCombinations = function(inputs) {
 	var fields = [];
 	var uField = null;
+	// Password fields already paired (a hidden copy can hand its pair to the
+	// visible field that comes after it).
+	var used = new Set();
 	for(var i = 0; i < inputs.length; i++) {
 		if(!inputs[i]) {
 			continue;
 		}
 
 		if(cipFields.isPasswordInput(inputs[i])) {
+			var pField = cipFields.preferShownPassword(uField, inputs[i]);
+			if(used.has(pField)) {
+				// A hidden copy of a password field that is already paired.
+				uField = null;
+				continue;
+			}
+			used.add(pField);
+			cipFields.setUniqueId(pField);
 			var uId = uField ? cipFields.prepareId(uField.getAttribute("data-cip-id")) : null;
 
 			var combination = {
 				"username": uId,
-				"password": cipFields.prepareId(inputs[i].getAttribute("data-cip-id"))
+				"password": cipFields.prepareId(pField.getAttribute("data-cip-id"))
 			};
 			// Sign-up or password change: kept for the save offer, never filled
 			// with an existing login.
-			if(cipFields.kind(inputs[i]) === "new-password") {
+			if(cipFields.kind(pField) === "new-password") {
 				combination.newPassword = true;
 			}
 			fields.push(combination);
@@ -1855,7 +1920,7 @@ cipFields.getPasswordField = function(usernameId, checkDisabled) {
 
 	// search all inputs on this one form
 	if(form) {
-		passwordField = form.querySelector("input[type='password']");
+		passwordField = cipFields.preferShownPassword(usernameField, form.querySelector("input[type='password']"));
 
 		if(cip.settings.usePasswordGenerator === true) {
 			cipPassword.init();
@@ -1873,7 +1938,7 @@ cipFields.getPasswordField = function(usernameId, checkDisabled) {
 				active = true;
 			}
 			if(active && cipFields.isPasswordInput(inputs[i])) {
-				passwordField = inputs[i];
+				passwordField = cipFields.preferShownPassword(usernameField, inputs[i]);
 				break;
 			}
 		}
