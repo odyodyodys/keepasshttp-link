@@ -654,19 +654,16 @@ const scenarios = {
   // ran the search again).
   async stacking(driver) {
     // Item 17a: the dropdown is in a closed shadow root, so count effects:
-    // one dropdown host, same items, and ONE password fill when the user types
-    // the username and leaves the field (stacked handlers filled twice).
+    // one dropdown host, same items, and ONE password fill when the user picks
+    // a login from the list (stacked handlers filled twice).
     const measure = async () => {
       await driver.executeScript("document.getElementById('other').focus()");
       await sleep(300);
       await driver.findElement(By.id('username')).click();
       await sleep(1200);
       const d = await dropdownState(driver);
-      await driver.findElement(By.id('username')).sendKeys(Key.ESCAPE);
       const t0 = await driver.executeScript('return Math.round(performance.now())');
-      await driver.findElement(By.id('username')).sendKeys('user-one');
-      await driver.findElement(By.id('username')).sendKeys(Key.ESCAPE);
-      await driver.findElement(By.id('username')).sendKeys(Key.TAB);
+      await clickDropdownItem(driver, 0);
       await sleep(1500);
       const s = await pageState(driver);
       return { hosts: d.hosts, items: d.items.length, passwordFills: countEvents(s.events, 'password', 'input', t0) };
@@ -873,7 +870,8 @@ scenarios.untrusted = async function (driver) {
   out.afterRealKeys = await lens();
   await clear();
 
-  // Positive E: user types a username and leaves the field with Tab.
+  // E: user types a username and leaves the field with Tab: no fill (a login
+  // is filled only when the user picks it).
   await driver.findElement(By.id('username')).click();
   await sleep(500);
   await driver.findElement(By.id('username')).sendKeys(Key.ESCAPE);
@@ -907,7 +905,7 @@ scenarios.untrusted = async function (driver) {
   out.pass = out.fakeClick === 'clicked-host' && out.afterFakeClick[1] === 0 && out.afterFakeKeys[1] === 0 &&
     out.fakeIconClick === 'clicked' && !out.afterFakeIconClick.open && out.afterFakeIconClick.requests === 0 &&
     out.afterRealIconClick.open && out.afterRealIconClick.generatedLen > 0 && out.afterRealIconClick.pageSeesShadow === false &&
-    out.afterScriptBlur[1] === 0 && out.afterRealKeys[1] > 0 && out.afterTypedTab[1] > 0;
+    out.afterScriptBlur[1] === 0 && out.afterRealKeys[1] > 0 && out.afterTypedTab[1] === 0;
   return out;
 };
 
@@ -1969,6 +1967,80 @@ scenarios.notify = async function (driver) {
   await configure(driver, { supressAlerts: false });
   return { shown, later, hidden,
     pass: shown.present && shown.pageSeesShadow === false && !later.present && !hidden.present };
+};
+
+// Leaving the username field never fills anything: a login is filled only
+// when the user picks it. Before: a typed username that was a KeePass login
+// (or any typed username, with one login for the site) got a password when
+// the user left the field, also over a password typed by hand.
+scenarios.blurfill = async function (driver) {
+  await configure(driver, { autoFillSingleEntry: false });
+  const open = (host) => openPage(driver, PAGES_TLS.replace('{host}', host) + '/login.html', 3500);
+  const password = () => driver.executeScript("return document.getElementById('password').value");
+  // Types into the username field and leaves it with Tab (Escape closes the list).
+  const typeUser = async (text) => {
+    const u = await driver.findElement(By.id('username'));
+    await u.click();
+    await sleep(400);
+    await u.sendKeys(Key.ESCAPE);
+    if (text) await u.sendKeys(text);
+    await sleep(300);
+    await u.sendKeys(Key.ESCAPE);
+    await u.sendKeys(Key.TAB);
+    await sleep(1500);
+  };
+  const out = {};
+
+  // A: one login for the site, another username typed: no fill.
+  await open('single');
+  await typeUser('someone-else');
+  out.oneLoginOtherName = await password();
+
+  // B: one login, its username typed: no fill.
+  await open('single');
+  await typeUser('user-one');
+  out.oneLoginSameName = await password();
+
+  // C: one login, password typed by hand first, then its username: kept.
+  await open('single');
+  await driver.findElement(By.id('password')).sendKeys('Own-Typed-1');
+  await typeUser('user-one');
+  out.oneLoginTypedPassword = await password();
+
+  // D: two logins, the username of one typed: no fill.
+  await open('multi');
+  await typeUser('bob-test');
+  out.twoLoginsSameName = await password();
+
+  // E: two logins, password typed by hand first, then a known username: kept.
+  await open('multi');
+  await driver.findElement(By.id('password')).sendKeys('Own-Typed-2');
+  await typeUser('bob-test');
+  out.twoLoginsTypedPassword = await password();
+
+  // F: a pick from the list still fills, also after text typed as a filter,
+  // and the user can then type another password and pass through the
+  // username field: kept.
+  await open('multi');
+  const u = await driver.findElement(By.id('username'));
+  await u.click();
+  await u.sendKeys('bob');
+  await waitFor(async () => (await dropdownState(driver)).items.length === 1, 1500);
+  await clickDropdownItem(driver, 0);
+  await waitFor(async () => (await password()) !== '', 2000);
+  out.pickedUsername = await driver.executeScript("return document.getElementById('username').value");
+  out.pickedPassword = await password();
+  const p = await driver.findElement(By.id('password'));
+  await p.clear();
+  await p.sendKeys('Own-Typed-3');
+  await typeUser('');
+  out.pickedThenTypedPassword = await password();
+
+  out.pass = out.oneLoginOtherName === '' && out.oneLoginSameName === '' &&
+    out.oneLoginTypedPassword === 'Own-Typed-1' && out.twoLoginsSameName === '' &&
+    out.twoLoginsTypedPassword === 'Own-Typed-2' && out.pickedUsername === 'bob-test' &&
+    out.pickedPassword === 'Dummy-Pass-B' && out.pickedThenTypedPassword === 'Own-Typed-3';
+  return out;
 };
 
 // ---------- main ----------

@@ -65,9 +65,6 @@ function kphcFindByCipId(selector, fieldId) {
 	return null;
 }
 
-// Last value of each username field typed by the user (trusted input events).
-var kphcTypedValues = new WeakMap();
-
 // contains already called method names
 var _called = {};
 
@@ -593,7 +590,6 @@ cipAutocomplete.select = function(e, index) {
 	var combination = cipFields.getCombination(isPassword ? "password" : "username", cipFields.idOf(el));
 	combination.loginId = item.loginId;
 	cip.fillInCredentials(combination, true, false);
-	kphcData(el, "fetched", true);
 	// Username step of a two-step sign-in (no password field yet): remember the
 	// pick for the password step. The background keeps only the login name, for
 	// this tab and site, for a few minutes, and only a login KeePass gave here.
@@ -643,11 +639,7 @@ cipAutocomplete.onKeyDown = function(e) {
 
 cipAutocomplete.onInput = function(e) {
 	if(kphcIsTrusted(e)) {
-		kphcTypedValues.set(this, this.value);
 		cipAutocomplete.open(this, this.value);
-	}
-	else {
-		kphcTypedValues.delete(this);
 	}
 }
 
@@ -659,20 +651,10 @@ cipAutocomplete.onClick = function(e) {
 }
 
 cipAutocomplete.onBlur = function(e) {
+	// Leaving the field never fills anything: a login is filled only when the
+	// user picks it (list, toolbar popup, shortcut or context menu).
 	if (cipAutocomplete.openFor === this) {
 		cipAutocomplete.close();
-	}
-	if(kphcData(this, "fetched") == true) {
-		kphcData(this, "fetched", false);
-	}
-	// Fill the password for a typed username only if the user typed it and
-	// the user left the field. A script can call blur() (trusted event) but
-	// cannot type, so both checks are needed.
-	else if(kphcIsTrusted(e) && kphcTypedValues.get(this) === this.value) {
-		var fields = cipFields.getCombination("username", cipFields.idOf(this));
-		if(_f(fields.password) && kphcData(_f(fields.password), "unchanged") != true && this.value != "") {
-			cip.fillInCredentials(fields, true, true);
-		}
 	}
 }
 
@@ -1962,15 +1944,6 @@ cipFields.getPasswordField = function(usernameId, checkDisabled) {
 
 cipFields.prepareCombinations = function(combinations) {
 	for(var i = 0; i < combinations.length; i++) {
-		var pwField = _f(combinations[i].password);
-		// needed for auto-complete: don't overwrite manually filled-in password field
-		if(pwField && !kphcData(pwField, "cipFields-onChange")) {
-			kphcData(pwField, "cipFields-onChange", true);
-			pwField.addEventListener("change", function() {
-				kphcData(this, "unchanged", false);
-			});
-		}
-
 		// initialize form-submit for remembering credentials
 		var fieldId = combinations[i].password || combinations[i].username;
 		var field = _f(fieldId);
@@ -2695,8 +2668,8 @@ cip.setValueWithChange = function(field, value) {
 
 // Fills login, password and string fields of entry i. The password is not in
 // the page: it is asked from the background now, by the entry's SecretRef
-// (item 16). opts: onlyPassword (do not set the login), forcePasswordType,
-// markUnchanged. Resolves to true if a field was filled.
+// (item 16). opts: onlyPassword (do not set the login), forcePasswordType.
+// Resolves to true if a field was filled.
 cip.getSecret = function(entry) {
 	if (!entry || typeof entry.SecretRef !== "string") {
 		return Promise.resolve(null);
@@ -2725,9 +2698,6 @@ cip.fillEntry = async function(i, uField, pField, stringFieldIds, opts) {
 			pField.setAttribute("type", "password");
 		}
 		cip.setValueWithChange(pField, secret.Password);
-		if (opts.markUnchanged) {
-			kphcData(pField, "unchanged", true);
-		}
 		filledIn = true;
 	}
 	var list = {};
@@ -2752,7 +2722,7 @@ cip.fillIn = async function(combination, onlyPassword, suppressWarnings) {
 	// exactly one pair of credentials available
 	if (cip.credentials.length == 1) {
 		var filledIn = await cip.fillEntry(0, uField, pField, combination.fields,
-			{ onlyPassword: onlyPassword, forcePasswordType: true, markUnchanged: true });
+			{ onlyPassword: onlyPassword, forcePasswordType: true });
 
 		if(!filledIn) {
 			if(!suppressWarnings) {
@@ -2764,7 +2734,7 @@ cip.fillIn = async function(combination, onlyPassword, suppressWarnings) {
 	// specific login id given
 	else if(combination.loginId != undefined && cip.credentials[combination.loginId]) {
 		var filledIn = await cip.fillEntry(combination.loginId, uField, pField, combination.fields,
-			{ markUnchanged: true });
+			{});
 
 		if(!filledIn) {
 			if(!suppressWarnings) {
@@ -2798,7 +2768,7 @@ cip.fillIn = async function(combination, onlyPassword, suppressWarnings) {
 			// only one mapping username found
 			if(countPasswords == 1) {
 				await cip.fillEntry(valIndex, uField, pField, combination.fields,
-					{ onlyPassword: onlyPassword, markUnchanged: true });
+					{ onlyPassword: onlyPassword });
 			}
 
 			// user has to select correct credentials by himself
